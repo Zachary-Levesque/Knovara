@@ -1,0 +1,16 @@
+# Repository ignore rules.
+#
+# This file keeps local secrets, dependency directories, build outputs, Python
+# caches, vector database files, and editor-specific state out of version
+# control while preserving the source scaffold.
+.env
+backend/.env
+backend/.chroma/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.next/
+out/
+dist/
+.DS_Store
