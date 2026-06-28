@@ -2,7 +2,7 @@
 Chunking and embedding pipeline.
 
 This file loads supported source files from disk, splits them into token-bounded
-chunks, embeds each chunk with OpenAI, stores the vectors in Chroma, and exposes
+chunks, embeds each chunk with Gemini, stores the vectors in Chroma, and exposes
 a CLI entrypoint for running ingestion end to end.
 """
 import argparse
@@ -11,11 +11,11 @@ import json
 from pathlib import Path
 
 import chromadb
-from chromadb.config import Settings as ChromaSettings
-from openai import OpenAI
+import google.generativeai as genai
 import tiktoken
+from chromadb.config import Settings as ChromaSettings
 
-from config import CHROMA_PERSIST_DIR, OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL
+from config import CHROMA_PERSIST_DIR, GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL
 from models import Chunk, Document, IngestResult
 
 
@@ -106,24 +106,27 @@ def chunk_documents(documents: list[Document]) -> list[Chunk]:
 
 
 def embed_and_store(chunks: list[Chunk], collection_name: str) -> None:
-    """Embed chunks with OpenAI and persist them in a Chroma collection."""
+    """Embed chunks with Gemini and persist them in a Chroma collection."""
     if not chunks:
         return
 
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
     chroma_client = chromadb.PersistentClient(
         path=CHROMA_PERSIST_DIR,
         settings=ChromaSettings(anonymized_telemetry=False),
     )
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
-    response = openai_client.embeddings.create(
-        model=OPENAI_EMBEDDING_MODEL,
-        input=[chunk.content for chunk in chunks],
-    )
-    embeddings = [item.embedding for item in response.data]
-    ids = [_chunk_id(chunk, collection_name) for chunk in chunks]
+    embeddings = []
+    for chunk in chunks:
+        result = genai.embed_content(
+            model=GEMINI_EMBEDDING_MODEL,
+            content=chunk.content,
+            task_type="retrieval_document",
+        )
+        embeddings.append(result["embedding"])
 
+    ids = [_chunk_id(chunk, collection_name) for chunk in chunks]
     collection.upsert(
         ids=ids,
         documents=[chunk.content for chunk in chunks],
