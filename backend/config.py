@@ -27,7 +27,7 @@ class Settings(BaseSettings):
         alias="GEMINI_CHAT_MODEL",
     )
     gemini_embedding_model: str = Field(
-        default="models/text-embedding-004",
+        default="text-embedding-004",
         alias="GEMINI_EMBEDDING_MODEL",
     )
     chroma_persist_dir: str = Field(default="./.chroma", alias="CHROMA_PERSIST_DIR")
