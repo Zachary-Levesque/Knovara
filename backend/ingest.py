@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 
 import chromadb
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import tiktoken
 from chromadb.config import Settings as ChromaSettings
 
@@ -99,6 +100,7 @@ def chunk_documents(documents: list[Document]) -> list[Chunk]:
 
             if end == len(tokens):
                 break
+
             start = end - CHUNK_OVERLAP_TOKENS
             chunk_index += 1
 
@@ -110,7 +112,8 @@ def embed_and_store(chunks: list[Chunk], collection_name: str) -> None:
     if not chunks:
         return
 
-    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
     chroma_client = chromadb.PersistentClient(
         path=CHROMA_PERSIST_DIR,
         settings=ChromaSettings(anonymized_telemetry=False),
@@ -119,12 +122,12 @@ def embed_and_store(chunks: list[Chunk], collection_name: str) -> None:
 
     embeddings = []
     for chunk in chunks:
-        result = genai.embed_content(
+        result = client.models.embed_content(
             model=GEMINI_EMBEDDING_MODEL,
-            content=chunk.content,
-            task_type="retrieval_document",
+            contents=chunk.content,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
         )
-        embeddings.append(result["embedding"])
+        embeddings.append(result.embeddings[0].values)
 
     ids = [_chunk_id(chunk, collection_name) for chunk in chunks]
     collection.upsert(
