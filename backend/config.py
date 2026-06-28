@@ -2,7 +2,7 @@
 Environment variables and settings.
 
 This file loads Knovara backend configuration from backend/.env and the process
-environment, exposes typed settings for OpenAI, Chroma, and CORS, and fails
+environment, exposes typed settings for Gemini, Chroma, and CORS, and fails
 loudly during startup when required secrets are missing.
 """
 from pathlib import Path
@@ -21,14 +21,14 @@ load_dotenv(ENV_FILE)
 class Settings(BaseSettings):
     """Typed backend settings loaded from environment variables."""
 
-    openai_api_key: str = Field(alias="OPENAI_API_KEY")
-    openai_chat_model: str = Field(
-        default="gpt-4o-mini",
-        alias="OPENAI_CHAT_MODEL",
+    gemini_api_key: str = Field(alias="GEMINI_API_KEY")
+    gemini_chat_model: str = Field(
+        default="gemini-1.5-flash",
+        alias="GEMINI_CHAT_MODEL",
     )
-    openai_embedding_model: str = Field(
-        default="text-embedding-3-small",
-        alias="OPENAI_EMBEDDING_MODEL",
+    gemini_embedding_model: str = Field(
+        default="models/text-embedding-004",
+        alias="GEMINI_EMBEDDING_MODEL",
     )
     chroma_persist_dir: str = Field(default="./.chroma", alias="CHROMA_PERSIST_DIR")
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
@@ -40,12 +40,12 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    @field_validator("openai_api_key")
+    @field_validator("gemini_api_key")
     @classmethod
-    def require_openai_api_key(cls, value: str) -> str:
+    def require_gemini_api_key(cls, value: str) -> str:
         if not value or not value.strip():
             raise ValueError(
-                "OPENAI_API_KEY is required. Set it in backend/.env or the "
+                "GEMINI_API_KEY is required. Set it in backend/.env or the "
                 "process environment before starting the backend."
             )
         return value
@@ -64,8 +64,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-OPENAI_API_KEY = settings.openai_api_key
-OPENAI_CHAT_MODEL = settings.openai_chat_model
-OPENAI_EMBEDDING_MODEL = settings.openai_embedding_model
+GEMINI_API_KEY = settings.gemini_api_key
+GEMINI_CHAT_MODEL = settings.gemini_chat_model
+GEMINI_EMBEDDING_MODEL = settings.gemini_embedding_model
 CHROMA_PERSIST_DIR = settings.chroma_persist_dir
 CORS_ORIGINS = settings.parsed_cors_origins
