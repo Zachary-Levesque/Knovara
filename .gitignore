@@ -5,6 +5,7 @@
 # control while preserving the source scaffold.
 .env
 backend/.env
+.chroma/
 backend/.chroma/
 __pycache__/
 *.py[cod]
