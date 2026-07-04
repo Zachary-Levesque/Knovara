@@ -1,10 +1,23 @@
-/*
- * Global stylesheet.
- *
- * This file will import TailwindCSS layers and hold app-wide base styles,
- * design tokens, and global layout rules for the Knovara frontend.
- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
