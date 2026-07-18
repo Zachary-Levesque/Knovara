@@ -26,6 +26,19 @@ class SourceChunk(BaseModel):
     score: float | None = None
 
 
+class CollectionStatus(BaseModel):
+    name: str
+    count: int
+    sample_sources: list[str]
+
+
+class IndexStatus(BaseModel):
+    persist_dir: str
+    default_collection: str
+    openai_configured: bool
+    collections: list[CollectionStatus]
+
+
 DEMO_KNOWLEDGE = [
     SourceChunk(
         title="Architecture Overview",
@@ -58,6 +71,52 @@ def search_sources(
             return indexed_sources
 
     return _search_demo_sources(query, limit)
+
+
+def get_index_status() -> IndexStatus:
+    """Return available Chroma collections and whether live embeddings are configured."""
+
+    collections: list[CollectionStatus] = []
+
+    try:
+        chroma_client = chromadb.PersistentClient(
+            path=CHROMA_PERSIST_DIR,
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+        for collection in chroma_client.list_collections():
+            name = collection.name if hasattr(collection, "name") else str(collection)
+            current = chroma_client.get_collection(name=name)
+            collections.append(
+                CollectionStatus(
+                    name=name,
+                    count=current.count(),
+                    sample_sources=_peek_sources(current),
+                )
+            )
+    except Exception as exc:
+        logger.info("Chroma status unavailable: %s", exc)
+
+    return IndexStatus(
+        persist_dir=CHROMA_PERSIST_DIR,
+        default_collection=DEFAULT_COLLECTION,
+        openai_configured=bool(OPENAI_API_KEY),
+        collections=collections,
+    )
+
+
+def delete_collection(collection_name: str) -> IndexStatus:
+    """Delete a Chroma collection if it exists and return refreshed index status."""
+
+    chroma_client = chromadb.PersistentClient(
+        path=CHROMA_PERSIST_DIR,
+        settings=ChromaSettings(anonymized_telemetry=False),
+    )
+    try:
+        chroma_client.delete_collection(name=collection_name)
+    except Exception as exc:
+        logger.info("Collection delete skipped for %s: %s", collection_name, exc)
+
+    return get_index_status()
 
 
 def _search_demo_sources(query: str, limit: int) -> list[SourceChunk]:
@@ -122,3 +181,20 @@ def _search_chroma(query: str, collection_name: str, limit: int) -> list[SourceC
 def _summarize_relevance(content: str) -> str:
     compact = " ".join(content.split())
     return compact[:180] + ("..." if len(compact) > 180 else "")
+
+
+def _peek_sources(collection) -> list[str]:
+    try:
+        peek = collection.peek(limit=8)
+    except Exception:
+        return []
+
+    sources: list[str] = []
+    for metadata in peek.get("metadatas", []) or []:
+        if not metadata:
+            continue
+        source = metadata.get("file_path") or metadata.get("filename")
+        if source and source not in sources:
+            sources.append(source)
+
+    return sources[:5]
