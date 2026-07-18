@@ -16,6 +16,7 @@ const initialProfile: MentorRequest = {
   team: "Platform",
   background: "General backend and product engineering",
   goal: "Ship a small production change with confidence",
+  collection_name: "seets",
 };
 
 export default function OnboardingPage() {
@@ -166,6 +167,16 @@ export default function OnboardingPage() {
               onChange={(event) => updateField("goal", event.target.value)}
               required
               value={profile.goal}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-medium text-slate-700">
+            Collection
+            <input
+              className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              maxLength={80}
+              onChange={(event) => updateField("collection_name", event.target.value)}
+              required
+              value={profile.collection_name ?? "seets"}
             />
           </label>
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
