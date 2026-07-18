@@ -2,7 +2,7 @@
 Chunking and embedding pipeline.
 
 This file loads supported source files from disk, splits them into token-bounded
-chunks, embeds each chunk with Gemini, stores the vectors in Chroma, and exposes
+chunks, embeds each chunk with OpenAI, stores the vectors in Chroma, and exposes
 a CLI entrypoint for running ingestion end to end.
 """
 import argparse
@@ -11,12 +11,11 @@ import json
 from pathlib import Path
 
 import chromadb
-from google import genai
-from google.genai import types
+from openai import OpenAI
 import tiktoken
 from chromadb.config import Settings as ChromaSettings
 
-from config import CHROMA_PERSIST_DIR, GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL
+from config import CHROMA_PERSIST_DIR, OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL
 from models import Chunk, Document, IngestResult
 
 
@@ -108,11 +107,13 @@ def chunk_documents(documents: list[Document]) -> list[Chunk]:
 
 
 def embed_and_store(chunks: list[Chunk], collection_name: str) -> None:
-    """Embed chunks with Gemini and persist them in a Chroma collection."""
+    """Embed chunks with OpenAI and persist them in a Chroma collection."""
     if not chunks:
         return
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is required to embed and store chunks.")
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
     chroma_client = chromadb.PersistentClient(
         path=CHROMA_PERSIST_DIR,
@@ -122,12 +123,11 @@ def embed_and_store(chunks: list[Chunk], collection_name: str) -> None:
 
     embeddings = []
     for chunk in chunks:
-        result = client.models.embed_content(
-            model=GEMINI_EMBEDDING_MODEL,
-            contents=chunk.content,
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+        result = client.embeddings.create(
+            model=OPENAI_EMBEDDING_MODEL,
+            input=chunk.content,
         )
-        embeddings.append(result.embeddings[0].values)
+        embeddings.append(result.data[0].embedding)
 
     ids = [_chunk_id(chunk, collection_name) for chunk in chunks]
     collection.upsert(
