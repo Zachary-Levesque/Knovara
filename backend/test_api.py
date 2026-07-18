@@ -30,6 +30,16 @@ def test_sources_returns_demo_chunks() -> None:
     assert {"title", "source", "content"} <= set(body[0])
 
 
+def test_index_status_returns_collections_shape() -> None:
+    response = client.get("/index/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "default_collection" in body
+    assert "openai_configured" in body
+    assert isinstance(body["collections"], list)
+
+
 def test_chat_returns_answer_with_citations() -> None:
     response = client.post(
         "/chat",
@@ -44,6 +54,7 @@ def test_chat_returns_answer_with_citations() -> None:
     body = response.json()
     assert "Backend Engineer" in body["answer"]
     assert len(body["citations"]) == 3
+    assert body["mode"] in {"demo", "indexed", "demo+llm", "indexed+llm"}
 
 
 def test_ingest_endpoint_returns_summary(monkeypatch) -> None:
