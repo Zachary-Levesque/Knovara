@@ -8,7 +8,15 @@ from config import CORS_ORIGINS, OPENAI_API_KEY, OPENAI_CHAT_MODEL
 from ingest import IngestRequest, ingest_directory
 from mentor import MentorBriefing, MentorRequest, build_briefing
 from models import IngestResult
-from retrieval import IndexStatus, SourceChunk, delete_collection, get_index_status, search_sources
+from retrieval import (
+    CollectionDetail,
+    IndexStatus,
+    SourceChunk,
+    delete_collection,
+    get_collection_detail,
+    get_index_status,
+    search_sources,
+)
 
 
 app = FastAPI(
@@ -66,3 +74,8 @@ def ingest(request: IngestRequest) -> dict:
 @app.delete("/collections/{collection_name}", response_model=IndexStatus)
 def clear_collection(collection_name: str) -> IndexStatus:
     return delete_collection(collection_name)
+
+
+@app.get("/collections/{collection_name}", response_model=CollectionDetail)
+def collection_detail(collection_name: str) -> CollectionDetail:
+    return get_collection_detail(collection_name)
