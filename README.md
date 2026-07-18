@@ -21,8 +21,7 @@ Help every engineer understand what matters, who to learn from, and how to contr
 Run the backend:
 
 ```bash
-cd backend
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
+make dev-backend
 ```
 
 Run the frontend:
@@ -30,7 +29,8 @@ Run the frontend:
 ```bash
 cd frontend
 npm install
-npm run dev
+cd ..
+make dev-frontend
 ```
 
 Open `http://localhost:3000`.
@@ -70,3 +70,18 @@ CORS_ORIGINS=http://localhost:3000
 5. Open Mentor and generate a first-week ramp-up path.
 
 The app shows whether answers came from demo fallback, indexed retrieval, or indexed retrieval plus OpenAI generation.
+
+## Checks
+
+```bash
+make test-backend
+make build-frontend
+make audit-frontend
+```
+
+Docker Compose is available for full-stack local development after creating
+`backend/.env` and root `.env` from their example files:
+
+```bash
+docker compose up --build
+```
