@@ -46,12 +46,27 @@ export type MentorBriefing = {
   people_to_meet: string[];
 };
 
+export type IngestRequest = {
+  directory: string;
+  collection_name: string;
+};
+
+export type IngestResult = {
+  files_processed: number;
+  chunks_created: number;
+  collection_name: string;
+};
+
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
   return postJson<ChatResponse>("/chat", request);
 }
 
 export async function getMentorBriefing(request: MentorRequest): Promise<MentorBriefing> {
   return postJson<MentorBriefing>("/mentor", request);
+}
+
+export async function ingestDirectory(request: IngestRequest): Promise<IngestResult> {
+  return postJson<IngestResult>("/ingest", request);
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
