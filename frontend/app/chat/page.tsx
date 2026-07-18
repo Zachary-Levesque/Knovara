@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { askQuestion, ChatResponse, getIndexStatus, IndexStatus } from "@/lib/api";
+import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
 
 export default function ChatPage() {
   const [question, setQuestion] = useState("What should I read before making my first backend change?");
@@ -12,10 +13,16 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setCollectionName(getSelectedCollection());
     getIndexStatus()
       .then((nextStatus) => {
         setStatus(nextStatus);
-        setCollectionName(nextStatus.default_collection);
+        const selected = getSelectedCollection();
+        setCollectionName(
+          nextStatus.collections.some((collection) => collection.name === selected)
+            ? selected
+            : nextStatus.default_collection
+        );
       })
       .catch(() => {
         setStatus(null);
@@ -28,6 +35,7 @@ export default function ChatPage() {
     setError("");
 
     try {
+      setSelectedCollection(collectionName);
       setResponse(
         await askQuestion({
           question,
@@ -57,7 +65,10 @@ export default function ChatPage() {
             {status?.collections.length ? (
               <select
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                onChange={(event) => setCollectionName(event.target.value)}
+                onChange={(event) => {
+                  setCollectionName(event.target.value);
+                  setSelectedCollection(event.target.value);
+                }}
                 value={collectionName}
               >
                 {status.collections.map((collection) => (
@@ -69,7 +80,10 @@ export default function ChatPage() {
             ) : (
               <input
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                onChange={(event) => setCollectionName(event.target.value)}
+                onChange={(event) => {
+                  setCollectionName(event.target.value);
+                  setSelectedCollection(event.target.value);
+                }}
                 value={collectionName}
               />
             )}
