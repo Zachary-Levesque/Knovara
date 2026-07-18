@@ -1,13 +1,20 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { askQuestion, ChatResponse, getIndexStatus, IndexStatus } from "@/lib/api";
-import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
+import { askQuestion, ChatResponse, getIndexStatus, getProjects, IndexStatus, Project } from "@/lib/api";
+import {
+  getSelectedCollection,
+  getSelectedProjectId,
+  setSelectedCollection,
+  setSelectedProjectId,
+} from "@/lib/collection";
 
 export default function ChatPage() {
   const [question, setQuestion] = useState("What should I read before making my first backend change?");
   const [collectionName, setCollectionName] = useState("seets");
   const [status, setStatus] = useState<IndexStatus | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectIdState, setSelectedProjectIdState] = useState<number | null>(null);
   const [response, setResponse] = useState<ChatResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,6 +34,17 @@ export default function ChatPage() {
       .catch(() => {
         setStatus(null);
       });
+    getProjects()
+      .then((nextProjects) => {
+        setProjects(nextProjects);
+        const savedProjectId = getSelectedProjectId();
+        const selected =
+          nextProjects.find((project) => project.id === savedProjectId) ?? nextProjects[0];
+        if (selected) {
+          selectProject(selected);
+        }
+      })
+      .catch(() => setProjects([]));
   }, []);
 
   async function submitQuestion(event: FormEvent<HTMLFormElement>) {
@@ -51,6 +69,13 @@ export default function ChatPage() {
     }
   }
 
+  function selectProject(project: Project) {
+    setSelectedProjectIdState(project.id);
+    setSelectedProjectId(project.id);
+    setCollectionName(project.collection_name);
+    setSelectedCollection(project.collection_name);
+  }
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -62,18 +87,20 @@ export default function ChatPage() {
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
           />
-            {status?.collections.length ? (
+            {projects.length ? (
               <select
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
                 onChange={(event) => {
-                  setCollectionName(event.target.value);
-                  setSelectedCollection(event.target.value);
+                  const project = projects.find((item) => item.id === Number(event.target.value));
+                  if (project) {
+                    selectProject(project);
+                  }
                 }}
-                value={collectionName}
+                value={selectedProjectIdState ?? ""}
               >
-                {status.collections.map((collection) => (
-                  <option key={collection.name} value={collection.name}>
-                    {collection.name}
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} / {project.collection_name}
                   </option>
                 ))}
               </select>
