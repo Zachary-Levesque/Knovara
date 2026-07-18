@@ -14,8 +14,14 @@ import chromadb
 from openai import OpenAI
 import tiktoken
 from chromadb.config import Settings as ChromaSettings
+from pydantic import BaseModel, Field
 
-from config import CHROMA_PERSIST_DIR, OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL
+from config import (
+    CHROMA_PERSIST_DIR,
+    DEFAULT_COLLECTION,
+    OPENAI_API_KEY,
+    OPENAI_EMBEDDING_MODEL,
+)
 from models import Chunk, Document, IngestResult
 
 
@@ -32,6 +38,13 @@ SUPPORTED_EXTENSIONS = {
 MAX_CHUNK_TOKENS = 500
 CHUNK_OVERLAP_TOKENS = 50
 TOKEN_ENCODING = "cl100k_base"
+
+
+class IngestRequest(BaseModel):
+    """API request for ingesting a local directory into a Chroma collection."""
+
+    directory: str = Field(default="../example_data", max_length=500)
+    collection_name: str = Field(default=DEFAULT_COLLECTION, max_length=80)
 
 
 def load_files(directory: str) -> list[Document]:
