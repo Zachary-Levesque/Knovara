@@ -61,6 +61,9 @@ export default function MentorPage() {
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-cyan-700">Mentor</p>
           <h1 className="mt-2 text-3xl font-semibold text-slate-950">{briefing.headline}</h1>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {briefing.mode} / {briefing.collection_name}
+          </p>
           <p className="mt-3 max-w-3xl leading-7 text-slate-600">{briefing.summary}</p>
         </div>
         <Link
