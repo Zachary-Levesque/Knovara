@@ -11,17 +11,21 @@ export type ChatRequest = {
   question: string;
   role?: string;
   team?: string;
+  collection_name?: string;
 };
 
 export type Citation = {
   title: string;
   source: string;
   relevance: string;
+  score?: number | null;
 };
 
 export type ChatResponse = {
   answer: string;
   citations: Citation[];
+  mode: string;
+  collection_name: string;
 };
 
 export type MentorRequest = {
@@ -30,6 +34,7 @@ export type MentorRequest = {
   team: string;
   background: string;
   goal: string;
+  collection_name?: string;
 };
 
 export type LearningItem = {
@@ -57,6 +62,19 @@ export type IngestResult = {
   collection_name: string;
 };
 
+export type CollectionStatus = {
+  name: string;
+  count: number;
+  sample_sources: string[];
+};
+
+export type IndexStatus = {
+  persist_dir: string;
+  default_collection: string;
+  openai_configured: boolean;
+  collections: CollectionStatus[];
+};
+
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
   return postJson<ChatResponse>("/chat", request);
 }
@@ -67,6 +85,30 @@ export async function getMentorBriefing(request: MentorRequest): Promise<MentorB
 
 export async function ingestDirectory(request: IngestRequest): Promise<IngestResult> {
   return postJson<IngestResult>("/ingest", request);
+}
+
+export async function getIndexStatus(): Promise<IndexStatus> {
+  const response = await fetch(`${API_BASE_URL}/index/status`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<IndexStatus>;
+}
+
+export async function clearCollection(collectionName: string): Promise<IndexStatus> {
+  const response = await fetch(`${API_BASE_URL}/collections/${encodeURIComponent(collectionName)}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<IndexStatus>;
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
