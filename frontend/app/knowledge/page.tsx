@@ -4,17 +4,29 @@ import { FormEvent, useEffect, useState } from "react";
 import {
   clearCollection,
   CollectionDetail,
+  createProject,
+  deleteProject,
   getIndexStatus,
   getCollectionDetail,
+  getProjects,
   IndexStatus,
-  ingestDirectory,
+  ingestProject,
   IngestResult,
+  Project,
 } from "@/lib/api";
-import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
+import {
+  getSelectedCollection,
+  getSelectedProjectId,
+  setSelectedCollection,
+  setSelectedProjectId,
+} from "@/lib/collection";
 
 export default function KnowledgePage() {
+  const [projectName, setProjectName] = useState("Seets Sensor Mesh");
   const [directory, setDirectory] = useState("../example_data");
   const [collectionName, setCollectionName] = useState("seets");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [detail, setDetail] = useState<CollectionDetail | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
@@ -23,8 +35,28 @@ export default function KnowledgePage() {
 
   useEffect(() => {
     setCollectionName(getSelectedCollection());
-    refreshStatus();
+    refreshAll();
   }, []);
+
+  async function refreshAll() {
+    await Promise.all([refreshStatus(), refreshProjects()]);
+  }
+
+  async function refreshProjects() {
+    try {
+      const nextProjects = await getProjects();
+      setProjects(nextProjects);
+      const savedProjectId = getSelectedProjectId();
+      const nextSelected =
+        nextProjects.find((project) => project.id === savedProjectId) ?? nextProjects[0] ?? null;
+      setSelectedProject(nextSelected);
+      if (nextSelected) {
+        applyProject(nextSelected);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load projects.");
+    }
+  }
 
   async function refreshStatus() {
     try {
@@ -39,23 +71,41 @@ export default function KnowledgePage() {
     }
   }
 
-  async function submitIngest(event: FormEvent<HTMLFormElement>) {
+  async function submitProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setResult(null);
     setLoading(true);
 
     try {
-      const nextResult = await ingestDirectory({
-        directory,
+      const project = await createProject({
+        name: projectName,
+        source_path: directory,
         collection_name: collectionName,
       });
-      setResult(nextResult);
-      setSelectedCollection(collectionName);
-      await refreshStatus();
-      await preview(collectionName);
+      selectProject(project);
+      await refreshProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to ingest directory.");
+      setError(err instanceof Error ? err.message : "Unable to create project.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function ingestSelectedProject(project: Project) {
+    setError("");
+    setResult(null);
+    setLoading(true);
+
+    try {
+      const nextResult = await ingestProject(project.id);
+      setResult(nextResult);
+      selectProject(project);
+      await refreshAll();
+      await preview(project.collection_name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to ingest project.");
+      await refreshProjects();
     } finally {
       setLoading(false);
     }
@@ -88,6 +138,37 @@ export default function KnowledgePage() {
     }
   }
 
+  async function removeProject(project: Project) {
+    setError("");
+    setLoading(true);
+
+    try {
+      await deleteProject(project.id);
+      if (selectedProject?.id === project.id) {
+        setSelectedProjectId(null);
+        setSelectedProject(null);
+      }
+      await refreshProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete project.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function selectProject(project: Project) {
+    setSelectedProject(project);
+    setSelectedProjectId(project.id);
+    applyProject(project);
+  }
+
+  function applyProject(project: Project) {
+    setProjectName(project.name);
+    setDirectory(project.source_path);
+    setCollectionName(project.collection_name);
+    setSelectedCollection(project.collection_name);
+  }
+
   const openaiMissing = status ? !status.openai_configured : false;
 
   return (
@@ -108,8 +189,16 @@ export default function KnowledgePage() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-950">Ingest directory</h2>
-          <form className="mt-5 grid gap-4" onSubmit={submitIngest}>
+          <h2 className="text-xl font-semibold text-slate-950">Create project</h2>
+          <form className="mt-5 grid gap-4" onSubmit={submitProject}>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Project name
+              <input
+                className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                onChange={(event) => setProjectName(event.target.value)}
+                value={projectName}
+              />
+            </label>
             <label className="grid gap-2 text-sm font-medium text-slate-700">
               Directory
               <input
@@ -136,10 +225,10 @@ export default function KnowledgePage() {
             ) : null}
             <button
               className="min-h-11 rounded-md bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-              disabled={loading || openaiMissing}
+              disabled={loading}
               type="submit"
             >
-              {loading ? "Working..." : "Index directory"}
+              {loading ? "Working..." : "Create project"}
             </button>
           </form>
           {result ? (
@@ -151,6 +240,75 @@ export default function KnowledgePage() {
           {error ? <p className="mt-4 text-sm leading-6 text-red-700">{error}</p> : null}
         </section>
       </div>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h2 className="text-xl font-semibold text-slate-950">Projects</h2>
+          <button
+            className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+            onClick={refreshAll}
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">
+          {projects.length ? (
+            projects.map((project) => (
+              <article
+                className={`rounded-md p-4 ${
+                  selectedProject?.id === project.id ? "bg-cyan-50" : "bg-slate-50"
+                }`}
+                key={project.id}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-950">{project.name}</h3>
+                    <p className="mt-1 break-all text-sm text-slate-600">{project.source_path}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {project.collection_name} / {project.ingest_status}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                      onClick={() => selectProject(project)}
+                      type="button"
+                    >
+                      Select
+                    </button>
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      disabled={loading || openaiMissing}
+                      onClick={() => ingestSelectedProject(project)}
+                      type="button"
+                    >
+                      Ingest
+                    </button>
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                      onClick={() => preview(project.collection_name)}
+                      type="button"
+                    >
+                      Preview
+                    </button>
+                    <button
+                      className="min-h-10 rounded-md border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      disabled={loading}
+                      onClick={() => removeProject(project)}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="text-sm text-slate-600">No projects found yet.</p>
+          )}
+        </div>
+      </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
