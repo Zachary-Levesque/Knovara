@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import main
 
 from ingest import chunk_documents, load_files
 from main import app
@@ -43,6 +44,29 @@ def test_chat_returns_answer_with_citations() -> None:
     body = response.json()
     assert "Backend Engineer" in body["answer"]
     assert len(body["citations"]) == 3
+
+
+def test_ingest_endpoint_returns_summary(monkeypatch) -> None:
+    def fake_ingest_directory(directory: str, collection_name: str) -> dict:
+        return {
+            "files_processed": 3,
+            "chunks_created": 4,
+            "collection_name": collection_name,
+        }
+
+    monkeypatch.setattr(main, "ingest_directory", fake_ingest_directory)
+
+    response = client.post(
+        "/ingest",
+        json={"directory": "../example_data", "collection_name": "seets"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "files_processed": 3,
+        "chunks_created": 4,
+        "collection_name": "seets",
+    }
 
 
 def test_mentor_returns_first_week_plan() -> None:
