@@ -8,7 +8,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMentorBriefing, MentorRequest } from "@/lib/api";
+import { getMentorBriefing, ingestDirectory, IngestResult, MentorRequest } from "@/lib/api";
 
 const initialProfile: MentorRequest = {
   name: "New teammate",
@@ -21,6 +21,9 @@ const initialProfile: MentorRequest = {
 export default function OnboardingPage() {
   const [profile, setProfile] = useState<MentorRequest>(initialProfile);
   const [error, setError] = useState("");
+  const [ingestError, setIngestError] = useState("");
+  const [ingestResult, setIngestResult] = useState<IngestResult | null>(null);
+  const [ingesting, setIngesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -45,6 +48,29 @@ export default function OnboardingPage() {
     setProfile((current) => ({ ...current, [field]: value }));
   }
 
+  async function ingestSampleData() {
+    setIngestError("");
+    setIngestResult(null);
+    setIngesting(true);
+
+    try {
+      setIngestResult(
+        await ingestDirectory({
+          directory: "../example_data",
+          collection_name: "seets",
+        })
+      );
+    } catch (err) {
+      setIngestError(
+        err instanceof Error
+          ? err.message
+          : "Unable to ingest sample data. Check backend credentials."
+      );
+    } finally {
+      setIngesting(false);
+    }
+  }
+
   return (
     <main className="mx-auto grid min-h-screen max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[360px_1fr]">
       <aside className="self-start">
@@ -65,6 +91,25 @@ export default function OnboardingPage() {
             <li>Recommended docs and people</li>
             <li>Grounded engineering Q&A</li>
           </ul>
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Knowledge index
+          </h2>
+          <button
+            className="mt-4 min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100"
+            disabled={ingesting}
+            onClick={ingestSampleData}
+            type="button"
+          >
+            {ingesting ? "Indexing..." : "Index sample data"}
+          </button>
+          {ingestResult ? (
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Indexed {ingestResult.files_processed} files into {ingestResult.collection_name}.
+            </p>
+          ) : null}
+          {ingestError ? <p className="mt-3 text-sm leading-6 text-red-700">{ingestError}</p> : null}
         </div>
       </aside>
 
