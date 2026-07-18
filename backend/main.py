@@ -1,5 +1,7 @@
 """FastAPI application entry point for Knovara."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,6 +10,18 @@ from config import CORS_ORIGINS, OPENAI_API_KEY, OPENAI_CHAT_MODEL
 from ingest import IngestRequest, ingest_directory
 from mentor import MentorBriefing, MentorRequest, build_briefing
 from models import IngestResult
+from projects import (
+    Project,
+    ProjectCreate,
+    ProjectUpdate,
+    create_project,
+    delete_project,
+    get_project,
+    init_project_store,
+    list_projects,
+    set_project_ingest_status,
+    update_project,
+)
 from retrieval import (
     CollectionDetail,
     IndexStatus,
@@ -19,10 +33,17 @@ from retrieval import (
 )
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_project_store()
+    yield
+
+
 app = FastAPI(
     title="Knovara API",
     version="0.1.0",
     description="Technical onboarding copilot demo API.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -53,6 +74,45 @@ def index_status() -> IndexStatus:
     return get_index_status()
 
 
+@app.get("/projects", response_model=list[Project])
+def projects() -> list[Project]:
+    return list_projects()
+
+
+@app.post("/projects", response_model=Project)
+def project_create(request: ProjectCreate) -> Project:
+    try:
+        return create_project(request)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/projects/{project_id}", response_model=Project)
+def project_detail(project_id: int) -> Project:
+    try:
+        return get_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.patch("/projects/{project_id}", response_model=Project)
+def project_update(project_id: int, request: ProjectUpdate) -> Project:
+    try:
+        return update_project(project_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/projects/{project_id}", status_code=204)
+def project_delete(project_id: int) -> None:
+    try:
+        delete_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     return answer_question(request)
@@ -69,6 +129,27 @@ def ingest(request: IngestRequest) -> dict:
         return ingest_directory(request.directory, request.collection_name)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/projects/{project_id}/ingest", response_model=IngestResult)
+def project_ingest(project_id: int) -> dict:
+    try:
+        project = get_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    set_project_ingest_status(project_id, "ingesting")
+    try:
+        result = ingest_directory(project.source_path, project.collection_name)
+    except RuntimeError as exc:
+        set_project_ingest_status(project_id, "failed")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        set_project_ingest_status(project_id, "failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    set_project_ingest_status(project_id, "ingested")
+    return result
 
 
 @app.delete("/collections/{collection_name}", response_model=IndexStatus)
