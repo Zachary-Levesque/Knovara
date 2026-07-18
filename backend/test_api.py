@@ -1,11 +1,13 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import chat as chat_module
 import main
 
 from ingest import chunk_documents, load_files
 from main import app
 from models import Document
+from retrieval import CollectionDetail, SourceChunk, SourcePreview
 
 
 client = TestClient(app)
@@ -57,6 +59,36 @@ def test_chat_returns_answer_with_citations() -> None:
     assert body["mode"] in {"demo", "indexed", "demo+llm", "indexed+llm"}
 
 
+def test_chat_reports_indexed_mode_when_retrieval_has_scores(monkeypatch) -> None:
+    def fake_search_sources(query: str, collection_name: str = "seets"):
+        return [
+            SourceChunk(
+                title="runbook.md",
+                source="example_data/runbook.md",
+                content="Gateway retries use bounded exponential backoff.",
+                relevance="Gateway retries use bounded exponential backoff.",
+                score=0.12,
+            )
+        ]
+
+    monkeypatch.setattr(chat_module, "search_sources", fake_search_sources)
+
+    response = client.post(
+        "/chat",
+        json={
+            "question": "Who owns gateway retry behavior?",
+            "role": "Backend Engineer",
+            "team": "Platform",
+            "collection_name": "seets",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "indexed"
+    assert body["citations"][0]["score"] == 0.12
+
+
 def test_ingest_endpoint_returns_summary(monkeypatch) -> None:
     def fake_ingest_directory(directory: str, collection_name: str) -> dict:
         return {
@@ -78,6 +110,46 @@ def test_ingest_endpoint_returns_summary(monkeypatch) -> None:
         "chunks_created": 4,
         "collection_name": "seets",
     }
+
+
+def test_ingest_endpoint_returns_clear_error(monkeypatch) -> None:
+    def fake_ingest_directory(directory: str, collection_name: str) -> dict:
+        raise RuntimeError("OPENAI_API_KEY is required to embed and store chunks.")
+
+    monkeypatch.setattr(main, "ingest_directory", fake_ingest_directory)
+
+    response = client.post(
+        "/ingest",
+        json={"directory": "../example_data", "collection_name": "seets"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "OPENAI_API_KEY is required to embed and store chunks."
+
+
+def test_collection_detail_endpoint_returns_preview(monkeypatch) -> None:
+    def fake_get_collection_detail(collection_name: str) -> CollectionDetail:
+        return CollectionDetail(
+            name=collection_name,
+            count=1,
+            chunks=[
+                SourcePreview(
+                    title="runbook.md",
+                    source="example_data/runbook.md",
+                    content="Retries use bounded exponential backoff.",
+                    chunk_index="0",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(main, "get_collection_detail", fake_get_collection_detail)
+
+    response = client.get("/collections/seets")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "seets"
+    assert body["chunks"][0]["title"] == "runbook.md"
 
 
 def test_mentor_returns_first_week_plan() -> None:
