@@ -6,9 +6,17 @@
  */
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMentorBriefing, ingestDirectory, IngestResult, MentorRequest } from "@/lib/api";
+import {
+  getIndexStatus,
+  getMentorBriefing,
+  IndexStatus,
+  ingestDirectory,
+  IngestResult,
+  MentorRequest,
+} from "@/lib/api";
+import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
 
 const initialProfile: MentorRequest = {
   name: "New teammate",
@@ -24,9 +32,17 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
   const [ingestError, setIngestError] = useState("");
   const [ingestResult, setIngestResult] = useState<IngestResult | null>(null);
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setProfile((current) => ({ ...current, collection_name: getSelectedCollection() }));
+    getIndexStatus()
+      .then(setIndexStatus)
+      .catch(() => setIndexStatus(null));
+  }, []);
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,6 +50,7 @@ export default function OnboardingPage() {
     setLoading(true);
 
     try {
+      setSelectedCollection(profile.collection_name ?? "seets");
       const briefing = await getMentorBriefing(profile);
       window.localStorage.setItem("knovara.profile", JSON.stringify(profile));
       window.localStorage.setItem("knovara.briefing", JSON.stringify(briefing));
@@ -47,6 +64,9 @@ export default function OnboardingPage() {
 
   function updateField(field: keyof MentorRequest, value: string) {
     setProfile((current) => ({ ...current, [field]: value }));
+    if (field === "collection_name") {
+      setSelectedCollection(value);
+    }
   }
 
   async function ingestSampleData() {
@@ -58,9 +78,10 @@ export default function OnboardingPage() {
       setIngestResult(
         await ingestDirectory({
           directory: "../example_data",
-          collection_name: "seets",
+          collection_name: profile.collection_name ?? "seets",
         })
       );
+      setIndexStatus(await getIndexStatus());
     } catch (err) {
       setIngestError(
         err instanceof Error
@@ -71,6 +92,8 @@ export default function OnboardingPage() {
       setIngesting(false);
     }
   }
+
+  const openaiMissing = indexStatus ? !indexStatus.openai_configured : false;
 
   return (
     <main className="mx-auto grid min-h-screen max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[360px_1fr]">
@@ -99,12 +122,17 @@ export default function OnboardingPage() {
           </h2>
           <button
             className="mt-4 min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100"
-            disabled={ingesting}
+            disabled={ingesting || openaiMissing}
             onClick={ingestSampleData}
             type="button"
           >
             {ingesting ? "Indexing..." : "Index sample data"}
           </button>
+          {openaiMissing ? (
+            <p className="mt-3 text-sm leading-6 text-amber-800">
+              Add OPENAI_API_KEY in backend/.env before indexing sample data.
+            </p>
+          ) : null}
           {ingestResult ? (
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Indexed {ingestResult.files_processed} files into {ingestResult.collection_name}.
