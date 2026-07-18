@@ -11,12 +11,19 @@ import { useRouter } from "next/navigation";
 import {
   getIndexStatus,
   getMentorBriefing,
+  getProjects,
   IndexStatus,
   ingestDirectory,
   IngestResult,
   MentorRequest,
+  Project,
 } from "@/lib/api";
-import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
+import {
+  getSelectedCollection,
+  getSelectedProjectId,
+  setSelectedCollection,
+  setSelectedProjectId,
+} from "@/lib/collection";
 
 const initialProfile: MentorRequest = {
   name: "New teammate",
@@ -33,6 +40,8 @@ export default function OnboardingPage() {
   const [ingestError, setIngestError] = useState("");
   const [ingestResult, setIngestResult] = useState<IngestResult | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectIdState] = useState<number | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -42,6 +51,17 @@ export default function OnboardingPage() {
     getIndexStatus()
       .then(setIndexStatus)
       .catch(() => setIndexStatus(null));
+    getProjects()
+      .then((nextProjects) => {
+        setProjects(nextProjects);
+        const savedProjectId = getSelectedProjectId();
+        const selected =
+          nextProjects.find((project) => project.id === savedProjectId) ?? nextProjects[0];
+        if (selected) {
+          selectProject(selected);
+        }
+      })
+      .catch(() => setProjects([]));
   }, []);
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -60,6 +80,17 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectProject(project: Project) {
+    setSelectedProjectIdState(project.id);
+    setSelectedProjectId(project.id);
+    setSelectedCollection(project.collection_name);
+    setProfile((current) => ({
+      ...current,
+      collection_name: project.collection_name,
+      team: current.team || project.name,
+    }));
   }
 
   function updateField(field: keyof MentorRequest, value: string) {
@@ -198,14 +229,33 @@ export default function OnboardingPage() {
             />
           </label>
           <label className="grid gap-2 text-sm font-medium text-slate-700">
-            Collection
-            <input
-              className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              maxLength={80}
-              onChange={(event) => updateField("collection_name", event.target.value)}
-              required
-              value={profile.collection_name ?? "seets"}
-            />
+            Project
+            {projects.length ? (
+              <select
+                className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                onChange={(event) => {
+                  const project = projects.find((item) => item.id === Number(event.target.value));
+                  if (project) {
+                    selectProject(project);
+                  }
+                }}
+                value={selectedProjectId ?? ""}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} / {project.collection_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                maxLength={80}
+                onChange={(event) => updateField("collection_name", event.target.value)}
+                required
+                value={profile.collection_name ?? "seets"}
+              />
+            )}
           </label>
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
           <button
