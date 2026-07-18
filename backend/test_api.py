@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 import chat as chat_module
@@ -40,6 +41,37 @@ def test_index_status_returns_collections_shape() -> None:
     assert "default_collection" in body
     assert "openai_configured" in body
     assert isinstance(body["collections"], list)
+
+
+def test_project_crud_flow() -> None:
+    collection_name = f"test_{uuid4().hex[:8]}"
+    create_response = client.post(
+        "/projects",
+        json={
+            "name": "Test Project",
+            "collection_name": collection_name,
+            "source_path": "../example_data",
+        },
+    )
+
+    assert create_response.status_code == 200
+    project = create_response.json()
+    assert project["name"] == "Test Project"
+    assert project["ingest_status"] == "not_ingested"
+
+    list_response = client.get("/projects")
+    assert list_response.status_code == 200
+    assert any(item["id"] == project["id"] for item in list_response.json())
+
+    update_response = client.patch(
+        f"/projects/{project['id']}",
+        json={"name": "Updated Project"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "Updated Project"
+
+    delete_response = client.delete(f"/projects/{project['id']}")
+    assert delete_response.status_code == 204
 
 
 def test_chat_returns_answer_with_citations() -> None:
@@ -125,6 +157,37 @@ def test_ingest_endpoint_returns_clear_error(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "OPENAI_API_KEY is required to embed and store chunks."
+
+
+def test_project_ingest_updates_status(monkeypatch) -> None:
+    collection_name = f"ingest_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "Ingest Project",
+            "collection_name": collection_name,
+            "source_path": "../example_data",
+        },
+    ).json()
+
+    def fake_ingest_directory(directory: str, collection_name: str) -> dict:
+        return {
+            "files_processed": 7,
+            "chunks_created": 8,
+            "collection_name": collection_name,
+        }
+
+    monkeypatch.setattr(main, "ingest_directory", fake_ingest_directory)
+
+    response = client.post(f"/projects/{project['id']}/ingest")
+
+    assert response.status_code == 200
+    assert response.json()["collection_name"] == collection_name
+
+    detail = client.get(f"/projects/{project['id']}").json()
+    assert detail["ingest_status"] == "ingested"
+
+    client.delete(f"/projects/{project['id']}")
 
 
 def test_collection_detail_endpoint_returns_preview(monkeypatch) -> None:
