@@ -8,7 +8,12 @@ a CLI entrypoint for running ingestion end to end.
 import argparse
 import hashlib
 import json
+import logging
+import os
 from pathlib import Path
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("CHROMA_TELEMETRY_DISABLED", "true")
 
 import chromadb
 from openai import OpenAI
@@ -24,6 +29,8 @@ from config import (
 )
 from models import Chunk, Document, IngestResult
 
+
+logging.getLogger("chromadb.telemetry.product.posthog").disabled = True
 
 SUPPORTED_EXTENSIONS = {
     ".py",
