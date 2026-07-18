@@ -49,6 +49,8 @@ export type MentorBriefing = {
   first_week: LearningItem[];
   recommended_sources: string[];
   people_to_meet: string[];
+  mode: string;
+  collection_name: string;
 };
 
 export type IngestRequest = {
@@ -73,6 +75,19 @@ export type IndexStatus = {
   default_collection: string;
   openai_configured: boolean;
   collections: CollectionStatus[];
+};
+
+export type SourcePreview = {
+  title: string;
+  source: string;
+  content: string;
+  chunk_index?: string | null;
+};
+
+export type CollectionDetail = {
+  name: string;
+  count: number;
+  chunks: SourcePreview[];
 };
 
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
@@ -109,6 +124,17 @@ export async function clearCollection(collectionName: string): Promise<IndexStat
   }
 
   return response.json() as Promise<IndexStatus>;
+}
+
+export async function getCollectionDetail(collectionName: string): Promise<CollectionDetail> {
+  const response = await fetch(`${API_BASE_URL}/collections/${encodeURIComponent(collectionName)}`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<CollectionDetail>;
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
