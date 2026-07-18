@@ -27,6 +27,7 @@ class Citation(BaseModel):
     title: str
     source: str
     relevance: str
+    score: float | None = None
 
 
 class ChatResponse(BaseModel):
@@ -34,6 +35,8 @@ class ChatResponse(BaseModel):
 
     answer: str
     citations: list[Citation]
+    mode: str
+    collection_name: str
 
 
 def answer_question(request: ChatRequest) -> ChatResponse:
@@ -45,16 +48,28 @@ def answer_question(request: ChatRequest) -> ChatResponse:
             title=source.title,
             source=source.source,
             relevance=source.relevance or source.content,
+            score=source.score,
         )
         for source in sources
     ]
+    retrieval_mode = "indexed" if any(citation.score is not None for citation in citations) else "demo"
 
     if OPENAI_API_KEY:
         generated_answer = _generate_answer(request, citations)
         if generated_answer:
-            return ChatResponse(answer=generated_answer, citations=citations)
+            return ChatResponse(
+                answer=generated_answer,
+                citations=citations,
+                mode=f"{retrieval_mode}+llm",
+                collection_name=request.collection_name,
+            )
 
-    return ChatResponse(answer=_fallback_answer(request, citations), citations=citations)
+    return ChatResponse(
+        answer=_fallback_answer(request, citations),
+        citations=citations,
+        mode=retrieval_mode,
+        collection_name=request.collection_name,
+    )
 
 
 def _fallback_answer(request: ChatRequest, citations: list[Citation]) -> str:
