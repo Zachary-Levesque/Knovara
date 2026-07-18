@@ -3,27 +3,37 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
   clearCollection,
+  CollectionDetail,
   getIndexStatus,
+  getCollectionDetail,
   IndexStatus,
   ingestDirectory,
   IngestResult,
 } from "@/lib/api";
+import { getSelectedCollection, setSelectedCollection } from "@/lib/collection";
 
 export default function KnowledgePage() {
   const [directory, setDirectory] = useState("../example_data");
   const [collectionName, setCollectionName] = useState("seets");
   const [status, setStatus] = useState<IndexStatus | null>(null);
+  const [detail, setDetail] = useState<CollectionDetail | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setCollectionName(getSelectedCollection());
     refreshStatus();
   }, []);
 
   async function refreshStatus() {
     try {
-      setStatus(await getIndexStatus());
+      const nextStatus = await getIndexStatus();
+      setStatus(nextStatus);
+      const selected = getSelectedCollection();
+      if (nextStatus.collections.some((collection) => collection.name === selected)) {
+        setCollectionName(selected);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load index status.");
     }
@@ -41,7 +51,9 @@ export default function KnowledgePage() {
         collection_name: collectionName,
       });
       setResult(nextResult);
+      setSelectedCollection(collectionName);
       await refreshStatus();
+      await preview(collectionName);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to ingest directory.");
     } finally {
@@ -56,12 +68,27 @@ export default function KnowledgePage() {
     try {
       setStatus(await clearCollection(name));
       setResult(null);
+      setDetail((current) => (current?.name === name ? null : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to clear collection.");
     } finally {
       setLoading(false);
     }
   }
+
+  async function preview(name: string) {
+    setError("");
+    setSelectedCollection(name);
+    setCollectionName(name);
+
+    try {
+      setDetail(await getCollectionDetail(name));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load collection preview.");
+    }
+  }
+
+  const openaiMissing = status ? !status.openai_configured : false;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -95,13 +122,21 @@ export default function KnowledgePage() {
               Collection
               <input
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                onChange={(event) => setCollectionName(event.target.value)}
+                onChange={(event) => {
+                  setCollectionName(event.target.value);
+                  setSelectedCollection(event.target.value);
+                }}
                 value={collectionName}
               />
             </label>
+            {openaiMissing ? (
+              <p className="rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">
+                Add OPENAI_API_KEY to backend/.env and restart the backend before indexing.
+              </p>
+            ) : null}
             <button
               className="min-h-11 rounded-md bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-              disabled={loading}
+              disabled={loading || openaiMissing}
               type="submit"
             >
               {loading ? "Working..." : "Index directory"}
@@ -138,6 +173,14 @@ export default function KnowledgePage() {
                     <p className="mt-1 text-sm text-slate-600">{collection.count} chunks indexed</p>
                   </div>
                   <button
+                    className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                    disabled={loading}
+                    onClick={() => preview(collection.name)}
+                    type="button"
+                  >
+                    Preview
+                  </button>
+                  <button
                     className="min-h-10 rounded-md border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-100"
                     disabled={loading}
                     onClick={() => clear(collection.name)}
@@ -162,6 +205,31 @@ export default function KnowledgePage() {
           )}
         </div>
       </section>
+
+      {detail ? (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">
+            <h2 className="text-xl font-semibold text-slate-950">{detail.name} preview</h2>
+            <p className="text-sm text-slate-500">{detail.count} chunks indexed</p>
+          </div>
+          <div className="mt-5 grid gap-4">
+            {detail.chunks.length ? (
+              detail.chunks.map((chunk) => (
+                <article className="rounded-md bg-slate-50 p-4" key={`${chunk.source}-${chunk.chunk_index}`}>
+                  <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
+                    <h3 className="font-semibold text-slate-950">{chunk.title}</h3>
+                    <p className="text-xs text-slate-500">Chunk {chunk.chunk_index ?? "n/a"}</p>
+                  </div>
+                  <p className="mt-1 break-all text-xs text-slate-500">{chunk.source}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{chunk.content}</p>
+                </article>
+              ))
+            ) : (
+              <p className="text-sm text-slate-600">No preview chunks are available.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
