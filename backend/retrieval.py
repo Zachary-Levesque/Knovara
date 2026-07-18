@@ -1,6 +1,10 @@
 """Retrieval abstractions used by the demo and indexed API paths."""
 
 import logging
+import os
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("CHROMA_TELEMETRY_DISABLED", "true")
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -16,6 +20,7 @@ from config import (
 
 
 logger = logging.getLogger(__name__)
+logging.getLogger("chromadb.telemetry.product.posthog").disabled = True
 
 
 class SourceChunk(BaseModel):
@@ -37,6 +42,19 @@ class IndexStatus(BaseModel):
     default_collection: str
     openai_configured: bool
     collections: list[CollectionStatus]
+
+
+class SourcePreview(BaseModel):
+    title: str
+    source: str
+    content: str
+    chunk_index: str | None = None
+
+
+class CollectionDetail(BaseModel):
+    name: str
+    count: int
+    chunks: list[SourcePreview]
 
 
 DEMO_KNOWLEDGE = [
@@ -117,6 +135,39 @@ def delete_collection(collection_name: str) -> IndexStatus:
         logger.info("Collection delete skipped for %s: %s", collection_name, exc)
 
     return get_index_status()
+
+
+def get_collection_detail(collection_name: str, limit: int = 10) -> CollectionDetail:
+    """Return preview chunks from a Chroma collection for source inspection."""
+
+    try:
+        chroma_client = chromadb.PersistentClient(
+            path=CHROMA_PERSIST_DIR,
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+        collection = chroma_client.get_collection(name=collection_name)
+        preview = collection.peek(limit=limit)
+    except Exception as exc:
+        logger.info("Collection preview unavailable for %s: %s", collection_name, exc)
+        return CollectionDetail(name=collection_name, count=0, chunks=[])
+
+    documents = preview.get("documents", []) or []
+    metadatas = preview.get("metadatas", []) or []
+    chunks: list[SourcePreview] = []
+
+    for index, content in enumerate(documents):
+        metadata = metadatas[index] if index < len(metadatas) and metadatas[index] else {}
+        source = metadata.get("file_path") or metadata.get("filename") or "indexed-source"
+        chunks.append(
+            SourcePreview(
+                title=metadata.get("filename") or source,
+                source=source,
+                content=_summarize_relevance(content),
+                chunk_index=metadata.get("chunk_index"),
+            )
+        )
+
+    return CollectionDetail(name=collection_name, count=collection.count(), chunks=chunks)
 
 
 def _search_demo_sources(query: str, limit: int) -> list[SourceChunk]:
