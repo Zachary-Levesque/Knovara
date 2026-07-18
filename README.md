@@ -57,6 +57,7 @@ Useful defaults:
 OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 CHROMA_PERSIST_DIR=./.chroma
+SQLITE_DB_PATH=./.knovara.sqlite3
 DEFAULT_COLLECTION=seets
 CORS_ORIGINS=http://localhost:3000
 ```
@@ -64,12 +65,21 @@ CORS_ORIGINS=http://localhost:3000
 ## Demo Flow
 
 1. Open the Index page at `/knowledge`.
-2. Ingest `../example_data` into the `seets` collection.
-3. Open Chat and select `seets`.
-4. Ask about gateway retries, ownership, onboarding, or architecture decisions.
-5. Open Mentor and generate a first-week ramp-up path.
+2. Create or select a project. The default project points at `../example_data`.
+3. Ingest the selected project into its Chroma collection.
+4. Open Chat and ask about gateway retries, ownership, onboarding, or architecture decisions.
+5. Open Mentor and generate a first-week ramp-up path scoped to the selected project.
 
 The app shows whether answers came from demo fallback, indexed retrieval, or indexed retrieval plus OpenAI generation.
+
+## Project Metadata
+
+Knovara stores product metadata in SQLite and embeddings in Chroma:
+
+* SQLite tracks projects, source paths, collection names, ingest status, and timestamps.
+* Chroma stores indexed chunks and embeddings for each project collection.
+
+The UI persists the selected project locally and uses that project across Index, Chat, and Mentor flows.
 
 ## Checks
 
