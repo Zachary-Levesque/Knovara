@@ -90,6 +90,73 @@ export type CollectionDetail = {
   chunks: SourcePreview[];
 };
 
+export type Project = {
+  id: number;
+  name: string;
+  collection_name: string;
+  source_path: string;
+  ingest_status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectCreate = {
+  name: string;
+  collection_name: string;
+  source_path: string;
+};
+
+export type ProjectUpdate = Partial<ProjectCreate> & {
+  ingest_status?: string;
+};
+
+export async function getProjects(): Promise<Project[]> {
+  const response = await fetch(`${API_BASE_URL}/projects`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<Project[]>;
+}
+
+export async function createProject(request: ProjectCreate): Promise<Project> {
+  return postJson<Project>("/projects", request);
+}
+
+export async function updateProject(projectId: number, request: ProjectUpdate): Promise<Project> {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<Project>;
+}
+
+export async function deleteProject(projectId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+}
+
+export async function ingestProject(projectId: number): Promise<IngestResult> {
+  return postJson<IngestResult>(`/projects/${projectId}/ingest`, {});
+}
+
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
   return postJson<ChatResponse>("/chat", request);
 }
