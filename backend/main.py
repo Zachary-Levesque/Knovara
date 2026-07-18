@@ -1,6 +1,6 @@
 """FastAPI application entry point for Knovara."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from chat import ChatRequest, ChatResponse, answer_question
@@ -8,7 +8,7 @@ from config import CORS_ORIGINS, OPENAI_API_KEY, OPENAI_CHAT_MODEL
 from ingest import IngestRequest, ingest_directory
 from mentor import MentorBriefing, MentorRequest, build_briefing
 from models import IngestResult
-from retrieval import SourceChunk, search_sources
+from retrieval import IndexStatus, SourceChunk, delete_collection, get_index_status, search_sources
 
 
 app = FastAPI(
@@ -40,6 +40,11 @@ def sources(query: str = "architecture onboarding decisions") -> list[SourceChun
     return search_sources(query)
 
 
+@app.get("/index/status", response_model=IndexStatus)
+def index_status() -> IndexStatus:
+    return get_index_status()
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     return answer_question(request)
@@ -52,4 +57,12 @@ def mentor(request: MentorRequest) -> MentorBriefing:
 
 @app.post("/ingest", response_model=IngestResult)
 def ingest(request: IngestRequest) -> dict:
-    return ingest_directory(request.directory, request.collection_name)
+    try:
+        return ingest_directory(request.directory, request.collection_name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/collections/{collection_name}", response_model=IndexStatus)
+def clear_collection(collection_name: str) -> IndexStatus:
+    return delete_collection(collection_name)
