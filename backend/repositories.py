@@ -68,6 +68,46 @@ class RepositoryStructure(BaseModel):
     languages: list[str]
 
 
+class ContributorSummary(BaseModel):
+    """Contributor activity derived from Git history."""
+
+    name: str
+    commits: int
+
+
+class RecentCommit(BaseModel):
+    """Recent Git commit details relevant for onboarding."""
+
+    sha: str
+    author: str
+    date: str
+    message: str
+
+
+class FileHotspot(BaseModel):
+    """Frequently changed file from recent Git history."""
+
+    path: str
+    changes: int
+
+
+class OwnershipHint(BaseModel):
+    """Likely owner for a path inferred from commit history."""
+
+    path: str
+    owner: str
+    commits: int
+
+
+class RepositoryActivity(BaseModel):
+    """Git activity signals used to explain people and recent change."""
+
+    contributors: list[ContributorSummary]
+    recent_commits: list[RecentCommit]
+    hotspots: list[FileHotspot]
+    ownership_hints: list[OwnershipHint]
+
+
 def is_github_url(value: str) -> bool:
     """Return whether a value is a supported GitHub repository URL."""
 
@@ -172,6 +212,25 @@ def analyze_repository_structure(root: Path) -> RepositoryStructure:
     )
 
 
+def analyze_repository_activity(root: Path) -> RepositoryActivity:
+    """Extract contributor and commit-history signals from a Git repository."""
+
+    if not (root / ".git").exists():
+        return RepositoryActivity(
+            contributors=[],
+            recent_commits=[],
+            hotspots=[],
+            ownership_hints=[],
+        )
+
+    return RepositoryActivity(
+        contributors=_contributors(root),
+        recent_commits=_recent_commits(root),
+        hotspots=_hotspots(root),
+        ownership_hints=_ownership_hints(root),
+    )
+
+
 def _checkout_path(repository_url: str) -> Path:
     digest = hashlib.sha256(repository_url.encode("utf-8")).hexdigest()[:12]
     parsed = urlparse(repository_url)
@@ -180,6 +239,84 @@ def _checkout_path(repository_url: str) -> Path:
     if not cache_root.is_absolute():
         cache_root = BACKEND_DIR / cache_root
     return cache_root / f"{repo_name}-{digest}"
+
+
+def _git(root: Path, args: list[str]) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip()
+
+
+def _contributors(root: Path) -> list[ContributorSummary]:
+    output = _git(root, ["shortlog", "-sne", "--all"])
+    contributors: list[ContributorSummary] = []
+    for line in output.splitlines():
+        match = re.match(r"\s*(\d+)\s+(.+?)(?:\s+<.+>)?$", line)
+        if match:
+            contributors.append(
+                ContributorSummary(name=match.group(2).strip(), commits=int(match.group(1)))
+            )
+    return contributors[:8]
+
+
+def _recent_commits(root: Path) -> list[RecentCommit]:
+    output = _git(root, ["log", "-n", "8", "--date=short", "--pretty=format:%h%x1f%an%x1f%ad%x1f%s"])
+    commits: list[RecentCommit] = []
+    for line in output.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 4:
+            commits.append(
+                RecentCommit(
+                    sha=parts[0],
+                    author=parts[1],
+                    date=parts[2],
+                    message=parts[3],
+                )
+            )
+    return commits
+
+
+def _hotspots(root: Path) -> list[FileHotspot]:
+    output = _git(root, ["log", "--name-only", "--pretty=format:"])
+    counts: dict[str, int] = {}
+    for line in output.splitlines():
+        path = line.strip()
+        if path:
+            counts[path] = counts.get(path, 0) + 1
+    return [
+        FileHotspot(path=path, changes=changes)
+        for path, changes in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+
+
+def _ownership_hints(root: Path) -> list[OwnershipHint]:
+    output = _git(root, ["log", "--name-only", "--pretty=format:author:%an"])
+    ownership: dict[str, dict[str, int]] = {}
+    current_author = ""
+    for line in output.splitlines():
+        if line.startswith("author:"):
+            current_author = line.removeprefix("author:").strip()
+            continue
+        path = line.strip()
+        if not path or not current_author:
+            continue
+        ownership.setdefault(path, {})
+        ownership[path][current_author] = ownership[path].get(current_author, 0) + 1
+
+    hints: list[OwnershipHint] = []
+    for path, author_counts in ownership.items():
+        owner, commits = sorted(author_counts.items(), key=lambda item: item[1], reverse=True)[0]
+        hints.append(OwnershipHint(path=path, owner=owner, commits=commits))
+
+    return sorted(hints, key=lambda item: item.commits, reverse=True)[:10]
 
 
 def _has_ignored_part(path: Path) -> bool:
