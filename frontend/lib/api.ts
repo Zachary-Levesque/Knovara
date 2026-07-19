@@ -120,6 +120,7 @@ export type ProjectOverview = {
   source_path: string;
   source_type: "local" | "github";
   repository_url?: string | null;
+  mode: string;
   summary: string;
   source_count: number;
   source_files: string[];
