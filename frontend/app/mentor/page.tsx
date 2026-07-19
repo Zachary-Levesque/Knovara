@@ -17,8 +17,12 @@ export default function MentorPage() {
   useEffect(() => {
     const savedBriefing = window.localStorage.getItem("knovara.briefing");
     if (savedBriefing) {
-      setBriefing(JSON.parse(savedBriefing) as MentorBriefing);
-      return;
+      try {
+        setBriefing(JSON.parse(savedBriefing) as MentorBriefing);
+        return;
+      } catch {
+        window.localStorage.removeItem("knovara.briefing");
+      }
     }
 
     const savedProfile = window.localStorage.getItem("knovara.profile");
@@ -26,7 +30,15 @@ export default function MentorPage() {
       return;
     }
 
-    getMentorBriefing(JSON.parse(savedProfile) as MentorRequest)
+    let profile: MentorRequest;
+    try {
+      profile = JSON.parse(savedProfile) as MentorRequest;
+    } catch {
+      window.localStorage.removeItem("knovara.profile");
+      return;
+    }
+
+    getMentorBriefing(profile)
       .then((nextBriefing) => {
         window.localStorage.setItem("knovara.briefing", JSON.stringify(nextBriefing));
         setBriefing(nextBriefing);
