@@ -8,6 +8,7 @@ import main
 from ingest import chunk_documents, load_files
 from main import app
 from models import Document
+from repositories import analyze_repository_structure, normalize_github_url
 from retrieval import CollectionDetail, SourceChunk, SourcePreview
 
 
@@ -57,6 +58,8 @@ def test_project_crud_flow() -> None:
     assert create_response.status_code == 200
     project = create_response.json()
     assert project["name"] == "Test Project"
+    assert project["source_type"] == "local"
+    assert project["repository_url"] is None
     assert project["ingest_status"] == "not_ingested"
 
     list_response = client.get("/projects")
@@ -119,13 +122,93 @@ def test_project_overview_extracts_onboarding_context() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["project_name"] == "Overview Project"
+    assert body["source_type"] == "local"
     assert body["source_count"] >= 5
+    assert "main.py" in body["repository_structure"]["entry_points"]
     assert "Markdown documentation" in body["technologies"]
     assert any("gateway" in item.lower() for item in body["components"])
     assert any("platform" in item.lower() for item in body["ownership"])
     assert any("ADR-001" in item for item in body["decisions"])
     assert len(body["learning_path"]) >= 3
     assert len(body["starter_questions"]) == 4
+
+    client.delete(f"/projects/{project['id']}")
+
+
+def test_project_create_accepts_github_repository_url() -> None:
+    collection_name = f"github_{uuid4().hex[:8]}"
+    create_response = client.post(
+        "/projects",
+        json={
+            "name": "GitHub Project",
+            "collection_name": collection_name,
+            "source_type": "github",
+            "source_path": "https://github.com/openai/openai-python",
+        },
+    )
+
+    assert create_response.status_code == 200
+    project = create_response.json()
+    assert project["source_type"] == "github"
+    assert project["source_path"] == "https://github.com/openai/openai-python.git"
+    assert project["repository_url"] == "https://github.com/openai/openai-python.git"
+
+    client.delete(f"/projects/{project['id']}")
+
+
+def test_project_create_rejects_invalid_github_repository_url() -> None:
+    collection_name = f"bad_github_{uuid4().hex[:8]}"
+    response = client.post(
+        "/projects",
+        json={
+            "name": "Invalid GitHub Project",
+            "collection_name": collection_name,
+            "source_type": "github",
+            "source_path": "https://example.com/not-github/repo",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "GitHub" in response.json()["detail"]
+
+
+def test_project_ingest_resolves_github_checkout(monkeypatch) -> None:
+    collection_name = f"github_ingest_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "GitHub Ingest Project",
+            "collection_name": collection_name,
+            "source_type": "github",
+            "source_path": "https://github.com/openai/openai-python",
+        },
+    ).json()
+
+    def fake_resolve_project_source_path(
+        source_type: str,
+        source_path: str,
+        repository_url: str | None,
+    ) -> Path:
+        assert source_type == "github"
+        assert source_path == "https://github.com/openai/openai-python.git"
+        assert repository_url == "https://github.com/openai/openai-python.git"
+        return REPO_ROOT / "example_data"
+
+    def fake_ingest_directory(directory: str, collection_name: str) -> dict:
+        assert directory == str(REPO_ROOT / "example_data")
+        return {
+            "files_processed": 3,
+            "chunks_created": 4,
+            "collection_name": collection_name,
+        }
+
+    monkeypatch.setattr(main, "resolve_project_source_path", fake_resolve_project_source_path)
+    monkeypatch.setattr(main, "ingest_directory", fake_ingest_directory)
+
+    response = client.post(f"/projects/{project['id']}/ingest")
+
+    assert response.status_code == 200
+    assert response.json()["collection_name"] == collection_name
 
     client.delete(f"/projects/{project['id']}")
 
@@ -147,6 +230,26 @@ def test_project_overview_reports_missing_source_path() -> None:
     assert "Directory does not exist" in response.json()["detail"]
 
     client.delete(f"/projects/{project['id']}")
+
+
+def test_github_url_normalization_supports_https_and_ssh() -> None:
+    assert (
+        normalize_github_url("https://github.com/openai/openai-python")
+        == "https://github.com/openai/openai-python.git"
+    )
+    assert (
+        normalize_github_url("git@github.com:openai/openai-python.git")
+        == "https://github.com/openai/openai-python.git"
+    )
+
+
+def test_repository_structure_extracts_key_files() -> None:
+    structure = analyze_repository_structure(REPO_ROOT / "example_data")
+
+    assert "main.py" in structure.entry_points
+    assert "README.md" in structure.documentation_files
+    assert "Python" in structure.languages
+    assert "main.py" in structure.key_files
 
 
 def test_chat_returns_answer_with_citations() -> None:
