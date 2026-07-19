@@ -183,6 +183,11 @@ export default function KnowledgePage() {
 
   function clearProjectForm() {
     setEditingProjectId(null);
+    if (selectedProject) {
+      applyProject(selectedProject);
+      return;
+    }
+
     setProjectName("Seets Sensor Mesh");
     setDirectory("../example_data");
     setCollectionName(getSelectedCollection());
@@ -251,10 +256,7 @@ export default function KnowledgePage() {
               Collection
               <input
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                onChange={(event) => {
-                  setCollectionName(event.target.value);
-                  setSelectedCollection(event.target.value);
-                }}
+                onChange={(event) => setCollectionName(event.target.value)}
                 value={collectionName}
               />
             </label>
