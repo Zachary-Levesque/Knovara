@@ -1,12 +1,14 @@
 """Project knowledge analysis for onboarding-oriented overviews."""
 
+import json
 import re
 from collections import Counter
 from pathlib import Path
 
+from openai import OpenAI
 from pydantic import BaseModel
 
-from config import BACKEND_DIR
+from config import BACKEND_DIR, OPENAI_API_KEY, OPENAI_CHAT_MODEL
 from ingest import load_files
 from models import Document
 from projects import Project
@@ -27,6 +29,7 @@ class ProjectOverview(BaseModel):
     source_path: str
     source_type: str
     repository_url: str | None = None
+    mode: str = "deterministic"
     summary: str
     source_count: int
     source_files: list[str]
@@ -93,12 +96,13 @@ def build_project_overview(project: Project) -> ProjectOverview:
     repository_structure = analyze_repository_structure(directory)
     repository_activity = analyze_repository_activity(directory)
 
-    return ProjectOverview(
+    deterministic = ProjectOverview(
         project_id=project.id,
         project_name=project.name,
         source_path=project.source_path,
         source_type=project.source_type,
         repository_url=project.repository_url,
+        mode="deterministic",
         summary=_summary(project, documents),
         source_count=len(documents),
         source_files=source_files[:12],
@@ -112,6 +116,12 @@ def build_project_overview(project: Project) -> ProjectOverview:
         learning_path=_learning_path(documents),
         starter_questions=_starter_questions(project, documents),
     )
+    if OPENAI_API_KEY:
+        generated = _generate_overview(project, documents, deterministic)
+        if generated:
+            return generated
+
+    return deterministic
 
 
 def _summary(project: Project, documents: list[Document]) -> str:
@@ -226,6 +236,101 @@ def _starter_questions(project: Project, documents: list[Document]) -> list[str]
         f"What recent decisions explain the current {topic} design?",
         "What is a good first production change for my role?",
     ]
+
+
+def _generate_overview(
+    project: Project,
+    documents: list[Document],
+    deterministic: ProjectOverview,
+) -> ProjectOverview | None:
+    context = _overview_context(documents, deterministic)
+    prompt = (
+        "Create an onboarding-focused technical project overview as JSON. "
+        "Use only the provided project evidence. Return exactly these keys: "
+        "summary, technologies, topics, components, ownership, decisions, learning_path, starter_questions. "
+        "Lists should contain concise strings. The summary should be practical and specific.\n\n"
+        f"Project: {project.name}\n"
+        f"Source type: {project.source_type}\n"
+        f"Repository URL: {project.repository_url or 'n/a'}\n\n"
+        f"Evidence:\n{context}"
+    )
+
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are Knovara, a concise technical onboarding analyst.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        payload = json.loads(response.choices[0].message.content or "{}")
+        return deterministic.model_copy(
+            update={
+                "mode": "llm",
+                "summary": _string_value(payload.get("summary"), deterministic.summary),
+                "technologies": _string_list(payload.get("technologies"), deterministic.technologies),
+                "topics": _string_list(payload.get("topics"), deterministic.topics),
+                "components": _string_list(payload.get("components"), deterministic.components),
+                "ownership": _string_list(payload.get("ownership"), deterministic.ownership),
+                "decisions": _string_list(payload.get("decisions"), deterministic.decisions),
+                "learning_path": _string_list(payload.get("learning_path"), deterministic.learning_path),
+                "starter_questions": _string_list(
+                    payload.get("starter_questions"),
+                    deterministic.starter_questions,
+                ),
+            }
+        )
+    except Exception:
+        return None
+
+
+def _overview_context(documents: list[Document], overview: ProjectOverview) -> str:
+    excerpts = []
+    for document in documents[:8]:
+        source = _relative_source(document)
+        compact = " ".join(document.content.split())
+        excerpts.append(f"Source: {source}\n{compact[:900]}")
+
+    structure = overview.repository_structure
+    activity = overview.repository_activity
+    return "\n\n".join(
+        [
+            f"Files: {', '.join(overview.source_files)}",
+            f"Languages: {', '.join(structure.languages)}",
+            f"Entry points: {', '.join(structure.entry_points)}",
+            f"Key files: {', '.join(structure.key_files)}",
+            "Recent commits: "
+            + "; ".join(
+                f"{commit.sha} {commit.date} {commit.author}: {commit.message}"
+                for commit in activity.recent_commits[:5]
+            ),
+            "Contributors: "
+            + ", ".join(
+                f"{contributor.name} ({contributor.commits})"
+                for contributor in activity.contributors[:5]
+            ),
+            *excerpts,
+        ]
+    )
+
+
+def _string_value(value: object, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
+
+
+def _string_list(value: object, fallback: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        return fallback
+    strings = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return strings[:10] or fallback
 
 
 def _find_document(documents: list[Document], name_part: str) -> Document | None:
