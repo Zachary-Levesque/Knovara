@@ -419,7 +419,9 @@ export default function KnowledgePage() {
                 {overview.project_name}
               </h2>
             </div>
-            <p className="text-sm text-slate-500">{overview.source_count} source files analyzed</p>
+            <p className="text-sm text-slate-500">
+              {overview.mode} / {overview.source_count} source files analyzed
+            </p>
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-slate-700">{overview.summary}</p>
 
