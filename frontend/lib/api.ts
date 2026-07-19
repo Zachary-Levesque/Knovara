@@ -95,6 +95,8 @@ export type Project = {
   name: string;
   collection_name: string;
   source_path: string;
+  source_type: "local" | "github";
+  repository_url?: string | null;
   ingest_status: string;
   created_at: string;
   updated_at: string;
@@ -104,6 +106,8 @@ export type ProjectCreate = {
   name: string;
   collection_name: string;
   source_path: string;
+  source_type?: "local" | "github";
+  repository_url?: string | null;
 };
 
 export type ProjectUpdate = Partial<ProjectCreate> & {
@@ -114,9 +118,12 @@ export type ProjectOverview = {
   project_id: number;
   project_name: string;
   source_path: string;
+  source_type: "local" | "github";
+  repository_url?: string | null;
   summary: string;
   source_count: number;
   source_files: string[];
+  repository_structure: RepositoryStructure;
   technologies: string[];
   topics: string[];
   components: string[];
@@ -124,6 +131,16 @@ export type ProjectOverview = {
   decisions: string[];
   learning_path: string[];
   starter_questions: string[];
+};
+
+export type RepositoryStructure = {
+  root_path: string;
+  top_level_directories: string[];
+  key_files: string[];
+  documentation_files: string[];
+  test_files: string[];
+  entry_points: string[];
+  languages: string[];
 };
 
 export async function getProjects(): Promise<Project[]> {
