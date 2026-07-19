@@ -27,6 +27,7 @@ import {
 export default function KnowledgePage() {
   const [projectName, setProjectName] = useState("Seets Sensor Mesh");
   const [directory, setDirectory] = useState("../example_data");
+  const [sourceType, setSourceType] = useState<"local" | "github">("local");
   const [collectionName, setCollectionName] = useState("seets");
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -87,6 +88,8 @@ export default function KnowledgePage() {
       const payload = {
         name: projectName,
         source_path: directory,
+        source_type: sourceType,
+        repository_url: sourceType === "github" ? directory : null,
         collection_name: collectionName,
       };
       const project =
@@ -196,12 +199,14 @@ export default function KnowledgePage() {
 
     setProjectName("Seets Sensor Mesh");
     setDirectory("../example_data");
+    setSourceType("local");
     setCollectionName(getSelectedCollection());
   }
 
   function applyProject(project: Project) {
     setProjectName(project.name);
     setDirectory(project.source_path);
+    setSourceType(project.source_type);
     setCollectionName(project.collection_name);
     setSelectedCollection(project.collection_name);
   }
@@ -262,10 +267,26 @@ export default function KnowledgePage() {
               />
             </label>
             <label className="grid gap-2 text-sm font-medium text-slate-700">
-              Directory
+              Source
+              <select
+                className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                onChange={(event) => {
+                  const nextType = event.target.value as "local" | "github";
+                  setSourceType(nextType);
+                  setDirectory(nextType === "local" ? "../example_data" : "https://github.com/");
+                }}
+                value={sourceType}
+              >
+                <option value="local">Local directory</option>
+                <option value="github">GitHub repository</option>
+              </select>
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              {sourceType === "github" ? "GitHub repository URL" : "Directory"}
               <input
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
                 onChange={(event) => setDirectory(event.target.value)}
+                placeholder={sourceType === "github" ? "https://github.com/owner/repo" : "../example_data"}
                 value={directory}
               />
             </label>
@@ -329,7 +350,7 @@ export default function KnowledgePage() {
                     <h3 className="font-semibold text-slate-950">{project.name}</h3>
                     <p className="mt-1 break-all text-sm text-slate-600">{project.source_path}</p>
                     <p className="mt-1 text-sm text-slate-600">
-                      {project.collection_name} / {project.ingest_status}
+                      {project.source_type} / {project.collection_name} / {project.ingest_status}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -409,6 +430,13 @@ export default function KnowledgePage() {
           </div>
 
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <OverviewList
+              title="Repository structure"
+              items={overview.repository_structure.top_level_directories}
+            />
+            <OverviewList title="Entry points" items={overview.repository_structure.entry_points} />
+            <OverviewList title="Key files" items={overview.repository_structure.key_files} />
+            <OverviewList title="Tests" items={overview.repository_structure.test_files} />
             <OverviewList title="Ownership and experts" items={overview.ownership} />
             <OverviewList title="Decision context" items={overview.decisions} />
             <OverviewList title="Learning path" items={overview.learning_path} />
@@ -504,9 +532,11 @@ function OverviewList({ title, items }: { title: string; items: string[] }) {
     <section className="rounded-md bg-slate-50 p-4">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
+        {items.length ? (
+          items.map((item) => <li key={item}>{item}</li>)
+        ) : (
+          <li>None detected yet.</li>
+        )}
       </ul>
     </section>
   );
