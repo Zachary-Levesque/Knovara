@@ -8,11 +8,13 @@ import {
   deleteProject,
   getIndexStatus,
   getCollectionDetail,
+  getProjectOverview,
   getProjects,
   IndexStatus,
   ingestProject,
   IngestResult,
   Project,
+  ProjectOverview,
   updateProject,
 } from "@/lib/api";
 import {
@@ -30,6 +32,7 @@ export default function KnowledgePage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [detail, setDetail] = useState<CollectionDetail | null>(null);
+  const [overview, setOverview] = useState<ProjectOverview | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -54,6 +57,7 @@ export default function KnowledgePage() {
       setSelectedProject(nextSelected);
       if (nextSelected) {
         applyProject(nextSelected);
+        await loadOverview(nextSelected.id);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load projects.");
@@ -156,6 +160,7 @@ export default function KnowledgePage() {
       if (selectedProject?.id === project.id) {
         setSelectedProjectId(null);
         setSelectedProject(null);
+        setOverview(null);
       }
       if (editingProjectId === project.id) {
         clearProjectForm();
@@ -172,6 +177,7 @@ export default function KnowledgePage() {
     setSelectedProject(project);
     setSelectedProjectId(project.id);
     applyProject(project);
+    loadOverview(project.id);
   }
 
   function editProject(project: Project) {
@@ -198,6 +204,17 @@ export default function KnowledgePage() {
     setDirectory(project.source_path);
     setCollectionName(project.collection_name);
     setSelectedCollection(project.collection_name);
+  }
+
+  async function loadOverview(projectId: number) {
+    setError("");
+
+    try {
+      setOverview(await getProjectOverview(projectId));
+    } catch (err) {
+      setOverview(null);
+      setError(err instanceof Error ? err.message : "Unable to load project overview.");
+    }
   }
 
   const openaiMissing = status ? !status.openai_configured : false;
@@ -324,6 +341,13 @@ export default function KnowledgePage() {
                       Select
                     </button>
                     <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                      onClick={() => selectProject(project)}
+                      type="button"
+                    >
+                      Overview
+                    </button>
+                    <button
                       className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100"
                       disabled={loading || openaiMissing}
                       onClick={() => ingestSelectedProject(project)}
@@ -362,6 +386,36 @@ export default function KnowledgePage() {
           )}
         </div>
       </section>
+
+      {overview ? (
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-cyan-700">
+                Project overview
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                {overview.project_name}
+              </h2>
+            </div>
+            <p className="text-sm text-slate-500">{overview.source_count} source files analyzed</p>
+          </div>
+          <p className="mt-4 max-w-4xl leading-7 text-slate-700">{overview.summary}</p>
+
+          <div className="mt-6 grid gap-5 lg:grid-cols-3">
+            <OverviewList title="Technologies" items={overview.technologies} />
+            <OverviewList title="Topics" items={overview.topics} />
+            <OverviewList title="Components" items={overview.components} />
+          </div>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <OverviewList title="Ownership and experts" items={overview.ownership} />
+            <OverviewList title="Decision context" items={overview.decisions} />
+            <OverviewList title="Learning path" items={overview.learning_path} />
+            <OverviewList title="Starter questions" items={overview.starter_questions} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -442,5 +496,18 @@ export default function KnowledgePage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function OverviewList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="rounded-md bg-slate-50 p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
   );
 }
