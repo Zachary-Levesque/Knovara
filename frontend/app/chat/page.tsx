@@ -1,7 +1,15 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { askQuestion, ChatResponse, getIndexStatus, getProjects, IndexStatus, Project } from "@/lib/api";
+import {
+  askQuestion,
+  ChatResponse,
+  getIndexStatus,
+  getProjects,
+  IndexStatus,
+  MentorRequest,
+  Project,
+} from "@/lib/api";
 import {
   getSelectedCollection,
   getSelectedProjectId,
@@ -12,6 +20,10 @@ import {
 export default function ChatPage() {
   const [question, setQuestion] = useState("What should I read before making my first backend change?");
   const [collectionName, setCollectionName] = useState("seets");
+  const [profile, setProfile] = useState<Pick<MentorRequest, "role" | "team">>({
+    role: "Backend Engineer",
+    team: "Platform",
+  });
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectIdState, setSelectedProjectIdState] = useState<number | null>(null);
@@ -20,6 +32,19 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const savedProfile = window.localStorage.getItem("knovara.profile");
+    if (savedProfile) {
+      try {
+        const parsed = JSON.parse(savedProfile) as MentorRequest;
+        setProfile({
+          role: parsed.role || "Backend Engineer",
+          team: parsed.team || "Platform",
+        });
+      } catch {
+        window.localStorage.removeItem("knovara.profile");
+      }
+    }
+
     setCollectionName(getSelectedCollection());
     getIndexStatus()
       .then((nextStatus) => {
@@ -57,8 +82,8 @@ export default function ChatPage() {
       setResponse(
         await askQuestion({
           question,
-          role: "Backend Engineer",
-          team: "Platform",
+          role: profile.role,
+          team: profile.team,
           collection_name: collectionName,
         })
       );
@@ -80,13 +105,16 @@ export default function ChatPage() {
     <main className="mx-auto max-w-5xl px-6 py-8">
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-950">Grounded engineering Q&A</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Asking as {profile.role} on {profile.team}.
+        </p>
         <form className="mt-5 grid gap-3" onSubmit={submitQuestion}>
           <div className="grid gap-3 md:grid-cols-[1fr_220px]">
-          <input
-            className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-          />
+            <input
+              className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+            />
             {projects.length ? (
               <select
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
