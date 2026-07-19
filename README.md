@@ -58,6 +58,7 @@ OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 CHROMA_PERSIST_DIR=./.chroma
 SQLITE_DB_PATH=./.knovara.sqlite3
+REPOSITORY_CACHE_DIR=./.repos
 DEFAULT_COLLECTION=seets
 CORS_ORIGINS=http://localhost:3000
 ```
@@ -65,8 +66,8 @@ CORS_ORIGINS=http://localhost:3000
 ## Demo Flow
 
 1. Open the Index page at `/knowledge`.
-2. Create or select a project. The default project points at `../example_data`.
-3. Ingest the selected project into its Chroma collection.
+2. Create or select a project. The default project points at `../example_data`; new projects can use a local directory or a GitHub repository URL.
+3. For GitHub projects, Knovara clones the repository into `REPOSITORY_CACHE_DIR`, then ingests the selected project into its Chroma collection.
 4. Open Chat and ask about gateway retries, ownership, onboarding, or architecture decisions.
 5. Open Mentor and generate a first-week ramp-up path scoped to the selected project.
 
