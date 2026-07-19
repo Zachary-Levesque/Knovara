@@ -74,6 +74,35 @@ def test_project_crud_flow() -> None:
     assert delete_response.status_code == 204
 
 
+def test_project_edit_resets_ingest_status_when_index_scope_changes() -> None:
+    collection_name = f"edit_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "Editable Project",
+            "collection_name": collection_name,
+            "source_path": "../example_data",
+        },
+    ).json()
+
+    status_response = client.patch(
+        f"/projects/{project['id']}",
+        json={"ingest_status": "ingested"},
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["ingest_status"] == "ingested"
+
+    update_response = client.patch(
+        f"/projects/{project['id']}",
+        json={"source_path": "../example_data/subset"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["ingest_status"] == "not_ingested"
+
+    client.delete(f"/projects/{project['id']}")
+
+
 def test_chat_returns_answer_with_citations() -> None:
     response = client.post(
         "/chat",
