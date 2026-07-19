@@ -23,6 +23,7 @@ from projects import (
     set_project_ingest_status,
     update_project,
 )
+from repositories import resolve_project_source_path
 from retrieval import (
     CollectionDetail,
     IndexStatus,
@@ -103,7 +104,7 @@ def project_overview(project_id: int) -> ProjectOverview:
         return build_project_overview(project)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (FileNotFoundError, NotADirectoryError) as exc:
+    except (FileNotFoundError, NotADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -152,7 +153,12 @@ def project_ingest(project_id: int) -> dict:
 
     set_project_ingest_status(project_id, "ingesting")
     try:
-        result = ingest_directory(project.source_path, project.collection_name)
+        source_path = resolve_project_source_path(
+            project.source_type,
+            project.source_path,
+            project.repository_url,
+        )
+        result = ingest_directory(str(source_path), project.collection_name)
     except RuntimeError as exc:
         set_project_ingest_status(project_id, "failed")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
