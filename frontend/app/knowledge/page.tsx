@@ -13,6 +13,7 @@ import {
   ingestProject,
   IngestResult,
   Project,
+  updateProject,
 } from "@/lib/api";
 import {
   getSelectedCollection,
@@ -30,6 +31,7 @@ export default function KnowledgePage() {
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [detail, setDetail] = useState<CollectionDetail | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -78,15 +80,22 @@ export default function KnowledgePage() {
     setLoading(true);
 
     try {
-      const project = await createProject({
+      const payload = {
         name: projectName,
         source_path: directory,
         collection_name: collectionName,
-      });
+      };
+      const project =
+        editingProjectId === null
+          ? await createProject(payload)
+          : await updateProject(editingProjectId, payload);
+
       selectProject(project);
+      setEditingProjectId(null);
+      setDetail((current) => (current?.name === project.collection_name ? current : null));
       await refreshProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create project.");
+      setError(err instanceof Error ? err.message : "Unable to save project.");
     } finally {
       setLoading(false);
     }
@@ -148,6 +157,9 @@ export default function KnowledgePage() {
         setSelectedProjectId(null);
         setSelectedProject(null);
       }
+      if (editingProjectId === project.id) {
+        clearProjectForm();
+      }
       await refreshProjects();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete project.");
@@ -160,6 +172,20 @@ export default function KnowledgePage() {
     setSelectedProject(project);
     setSelectedProjectId(project.id);
     applyProject(project);
+  }
+
+  function editProject(project: Project) {
+    setEditingProjectId(project.id);
+    selectProject(project);
+    setError("");
+    setResult(null);
+  }
+
+  function clearProjectForm() {
+    setEditingProjectId(null);
+    setProjectName("Seets Sensor Mesh");
+    setDirectory("../example_data");
+    setCollectionName(getSelectedCollection());
   }
 
   function applyProject(project: Project) {
@@ -189,7 +215,21 @@ export default function KnowledgePage() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-950">Create project</h2>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-xl font-semibold text-slate-950">
+              {editingProjectId === null ? "Create project" : "Edit project"}
+            </h2>
+            {editingProjectId !== null ? (
+              <button
+                className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                disabled={loading}
+                onClick={clearProjectForm}
+                type="button"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
           <form className="mt-5 grid gap-4" onSubmit={submitProject}>
             <label className="grid gap-2 text-sm font-medium text-slate-700">
               Project name
@@ -228,7 +268,11 @@ export default function KnowledgePage() {
               disabled={loading}
               type="submit"
             >
-              {loading ? "Working..." : "Create project"}
+              {loading
+                ? "Working..."
+                : editingProjectId === null
+                  ? "Create project"
+                  : "Save project"}
             </button>
           </form>
           {result ? (
@@ -284,6 +328,13 @@ export default function KnowledgePage() {
                       type="button"
                     >
                       Ingest
+                    </button>
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
+                      onClick={() => editProject(project)}
+                      type="button"
+                    >
+                      Edit
                     </button>
                     <button
                       className="min-h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950"
