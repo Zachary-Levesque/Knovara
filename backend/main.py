@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from analysis import ProjectOverview, build_project_overview
 from chat import ChatRequest, ChatResponse, answer_question
 from config import CORS_ORIGINS, OPENAI_API_KEY, OPENAI_CHAT_MODEL
 from ingest import IngestRequest, ingest_directory
@@ -93,6 +94,17 @@ def project_detail(project_id: int) -> Project:
         return get_project(project_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/projects/{project_id}/overview", response_model=ProjectOverview)
+def project_overview(project_id: int) -> ProjectOverview:
+    try:
+        project = get_project(project_id)
+        return build_project_overview(project)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.patch("/projects/{project_id}", response_model=Project)
