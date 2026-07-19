@@ -10,7 +10,13 @@ from config import BACKEND_DIR
 from ingest import load_files
 from models import Document
 from projects import Project
-from repositories import RepositoryStructure, analyze_repository_structure, resolve_project_source_path
+from repositories import (
+    RepositoryActivity,
+    RepositoryStructure,
+    analyze_repository_activity,
+    analyze_repository_structure,
+    resolve_project_source_path,
+)
 
 
 class ProjectOverview(BaseModel):
@@ -25,6 +31,7 @@ class ProjectOverview(BaseModel):
     source_count: int
     source_files: list[str]
     repository_structure: RepositoryStructure
+    repository_activity: RepositoryActivity
     technologies: list[str]
     topics: list[str]
     components: list[str]
@@ -84,6 +91,7 @@ def build_project_overview(project: Project) -> ProjectOverview:
     documents = load_files(str(directory))
     source_files = [_relative_source(document) for document in documents]
     repository_structure = analyze_repository_structure(directory)
+    repository_activity = analyze_repository_activity(directory)
 
     return ProjectOverview(
         project_id=project.id,
@@ -95,6 +103,7 @@ def build_project_overview(project: Project) -> ProjectOverview:
         source_count=len(documents),
         source_files=source_files[:12],
         repository_structure=repository_structure,
+        repository_activity=repository_activity,
         technologies=_technologies(documents, repository_structure),
         topics=_topics(documents),
         components=_components(documents),
