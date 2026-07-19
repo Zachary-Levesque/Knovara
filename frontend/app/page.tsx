@@ -13,7 +13,7 @@ import {
   getMentorBriefing,
   getProjects,
   IndexStatus,
-  ingestDirectory,
+  ingestProject,
   IngestResult,
   MentorRequest,
   Project,
@@ -42,6 +42,7 @@ export default function OnboardingPage() {
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectIdState] = useState<number | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -84,6 +85,7 @@ export default function OnboardingPage() {
 
   function selectProject(project: Project) {
     setSelectedProjectIdState(project.id);
+    setSelectedProject(project);
     setSelectedProjectId(project.id);
     setSelectedCollection(project.collection_name);
     setProfile((current) => ({
@@ -100,24 +102,32 @@ export default function OnboardingPage() {
     }
   }
 
-  async function ingestSampleData() {
+  async function ingestSelectedProject() {
     setIngestError("");
     setIngestResult(null);
     setIngesting(true);
 
     try {
-      setIngestResult(
-        await ingestDirectory({
-          directory: "../example_data",
-          collection_name: profile.collection_name ?? "seets",
-        })
-      );
+      const project =
+        selectedProject ??
+        projects.find((item) => item.id === selectedProjectId) ??
+        projects[0] ??
+        null;
+
+      if (!project) {
+        throw new Error("Create or select a project before indexing.");
+      }
+
+      setIngestResult(await ingestProject(project.id));
       setIndexStatus(await getIndexStatus());
+      const nextProjects = await getProjects();
+      setProjects(nextProjects);
+      selectProject(nextProjects.find((item) => item.id === project.id) ?? project);
     } catch (err) {
       setIngestError(
         err instanceof Error
           ? err.message
-          : "Unable to ingest sample data. Check backend credentials."
+          : "Unable to ingest project. Check backend credentials."
       );
     } finally {
       setIngesting(false);
@@ -153,15 +163,15 @@ export default function OnboardingPage() {
           </h2>
           <button
             className="mt-4 min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100"
-            disabled={ingesting || openaiMissing}
-            onClick={ingestSampleData}
+            disabled={ingesting || openaiMissing || !projects.length}
+            onClick={ingestSelectedProject}
             type="button"
           >
-            {ingesting ? "Indexing..." : "Index sample data"}
+            {ingesting ? "Indexing..." : "Index selected project"}
           </button>
           {openaiMissing ? (
             <p className="mt-3 text-sm leading-6 text-amber-800">
-              Add OPENAI_API_KEY in backend/.env before indexing sample data.
+              Add OPENAI_API_KEY in backend/.env before indexing project data.
             </p>
           ) : null}
           {ingestResult ? (
