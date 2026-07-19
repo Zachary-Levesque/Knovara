@@ -10,6 +10,7 @@ from config import BACKEND_DIR
 from ingest import load_files
 from models import Document
 from projects import Project
+from repositories import RepositoryStructure, analyze_repository_structure, resolve_project_source_path
 
 
 class ProjectOverview(BaseModel):
@@ -18,9 +19,12 @@ class ProjectOverview(BaseModel):
     project_id: int
     project_name: str
     source_path: str
+    source_type: str
+    repository_url: str | None = None
     summary: str
     source_count: int
     source_files: list[str]
+    repository_structure: RepositoryStructure
     technologies: list[str]
     topics: list[str]
     components: list[str]
@@ -72,18 +76,26 @@ TECHNOLOGY_BY_EXTENSION = {
 def build_project_overview(project: Project) -> ProjectOverview:
     """Build a concise overview of what matters in a project."""
 
-    directory = _resolve_source_path(project.source_path)
+    directory = resolve_project_source_path(
+        project.source_type,
+        project.source_path,
+        project.repository_url,
+    )
     documents = load_files(str(directory))
     source_files = [_relative_source(document) for document in documents]
+    repository_structure = analyze_repository_structure(directory)
 
     return ProjectOverview(
         project_id=project.id,
         project_name=project.name,
         source_path=project.source_path,
+        source_type=project.source_type,
+        repository_url=project.repository_url,
         summary=_summary(project, documents),
         source_count=len(documents),
         source_files=source_files[:12],
-        technologies=_technologies(documents),
+        repository_structure=repository_structure,
+        technologies=_technologies(documents, repository_structure),
         topics=_topics(documents),
         components=_components(documents),
         ownership=_ownership(documents),
@@ -91,13 +103,6 @@ def build_project_overview(project: Project) -> ProjectOverview:
         learning_path=_learning_path(documents),
         starter_questions=_starter_questions(project, documents),
     )
-
-
-def _resolve_source_path(source_path: str) -> Path:
-    path = Path(source_path).expanduser()
-    if path.is_absolute():
-        return path.resolve()
-    return (BACKEND_DIR / path).resolve()
 
 
 def _summary(project: Project, documents: list[Document]) -> str:
@@ -109,18 +114,21 @@ def _summary(project: Project, documents: list[Document]) -> str:
     return f"{project.name} has {len(documents)} indexed source files ready for onboarding."
 
 
-def _technologies(documents: list[Document]) -> list[str]:
+def _technologies(
+    documents: list[Document],
+    repository_structure: RepositoryStructure,
+) -> list[str]:
     extensions = {
         document.metadata.get("extension", "")
         for document in documents
         if document.metadata.get("extension")
     }
-    technologies = [
+    technologies = repository_structure.languages + [
         TECHNOLOGY_BY_EXTENSION[extension]
         for extension in sorted(extensions)
         if extension in TECHNOLOGY_BY_EXTENSION
     ]
-    return technologies or ["Project documentation"]
+    return _dedupe(technologies) or ["Project documentation"]
 
 
 def _topics(documents: list[Document]) -> list[str]:
