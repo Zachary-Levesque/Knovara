@@ -110,6 +110,22 @@ export type ProjectUpdate = Partial<ProjectCreate> & {
   ingest_status?: string;
 };
 
+export type ProjectOverview = {
+  project_id: number;
+  project_name: string;
+  source_path: string;
+  summary: string;
+  source_count: number;
+  source_files: string[];
+  technologies: string[];
+  topics: string[];
+  components: string[];
+  ownership: string[];
+  decisions: string[];
+  learning_path: string[];
+  starter_questions: string[];
+};
+
 export async function getProjects(): Promise<Project[]> {
   const response = await fetch(`${API_BASE_URL}/projects`);
 
@@ -123,6 +139,17 @@ export async function getProjects(): Promise<Project[]> {
 
 export async function createProject(request: ProjectCreate): Promise<Project> {
   return postJson<Project>("/projects", request);
+}
+
+export async function getProjectOverview(projectId: number): Promise<ProjectOverview> {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/overview`);
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<ProjectOverview>;
 }
 
 export async function updateProject(projectId: number, request: ProjectUpdate): Promise<Project> {
