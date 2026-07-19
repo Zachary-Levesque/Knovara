@@ -437,6 +437,30 @@ export default function KnowledgePage() {
             <OverviewList title="Entry points" items={overview.repository_structure.entry_points} />
             <OverviewList title="Key files" items={overview.repository_structure.key_files} />
             <OverviewList title="Tests" items={overview.repository_structure.test_files} />
+            <OverviewList
+              title="Contributors"
+              items={overview.repository_activity.contributors.map(
+                (contributor) => `${contributor.name} / ${contributor.commits} commits`
+              )}
+            />
+            <OverviewList
+              title="Recent activity"
+              items={overview.repository_activity.recent_commits.map(
+                (commit) => `${commit.sha} / ${commit.date} / ${commit.author}: ${commit.message}`
+              )}
+            />
+            <OverviewList
+              title="Frequently changed files"
+              items={overview.repository_activity.hotspots.map(
+                (hotspot) => `${hotspot.path} / ${hotspot.changes} changes`
+              )}
+            />
+            <OverviewList
+              title="Likely owners"
+              items={overview.repository_activity.ownership_hints.map(
+                (hint) => `${hint.path} / ${hint.owner} / ${hint.commits} commits`
+              )}
+            />
             <OverviewList title="Ownership and experts" items={overview.ownership} />
             <OverviewList title="Decision context" items={overview.decisions} />
             <OverviewList title="Learning path" items={overview.learning_path} />
