@@ -124,6 +124,7 @@ export type ProjectOverview = {
   source_count: number;
   source_files: string[];
   repository_structure: RepositoryStructure;
+  repository_activity: RepositoryActivity;
   technologies: string[];
   topics: string[];
   components: string[];
@@ -141,6 +142,36 @@ export type RepositoryStructure = {
   test_files: string[];
   entry_points: string[];
   languages: string[];
+};
+
+export type RepositoryActivity = {
+  contributors: ContributorSummary[];
+  recent_commits: RecentCommit[];
+  hotspots: FileHotspot[];
+  ownership_hints: OwnershipHint[];
+};
+
+export type ContributorSummary = {
+  name: string;
+  commits: number;
+};
+
+export type RecentCommit = {
+  sha: string;
+  author: string;
+  date: string;
+  message: string;
+};
+
+export type FileHotspot = {
+  path: string;
+  changes: number;
+};
+
+export type OwnershipHint = {
+  path: string;
+  owner: string;
+  commits: number;
 };
 
 export async function getProjects(): Promise<Project[]> {
