@@ -103,6 +103,52 @@ def test_project_edit_resets_ingest_status_when_index_scope_changes() -> None:
     client.delete(f"/projects/{project['id']}")
 
 
+def test_project_overview_extracts_onboarding_context() -> None:
+    collection_name = f"overview_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "Overview Project",
+            "collection_name": collection_name,
+            "source_path": str(REPO_ROOT / "example_data"),
+        },
+    ).json()
+
+    response = client.get(f"/projects/{project['id']}/overview")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project_name"] == "Overview Project"
+    assert body["source_count"] >= 5
+    assert "Markdown documentation" in body["technologies"]
+    assert any("gateway" in item.lower() for item in body["components"])
+    assert any("platform" in item.lower() for item in body["ownership"])
+    assert any("ADR-001" in item for item in body["decisions"])
+    assert len(body["learning_path"]) >= 3
+    assert len(body["starter_questions"]) == 4
+
+    client.delete(f"/projects/{project['id']}")
+
+
+def test_project_overview_reports_missing_source_path() -> None:
+    collection_name = f"missing_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "Missing Source Project",
+            "collection_name": collection_name,
+            "source_path": "./does-not-exist",
+        },
+    ).json()
+
+    response = client.get(f"/projects/{project['id']}/overview")
+
+    assert response.status_code == 400
+    assert "Directory does not exist" in response.json()["detail"]
+
+    client.delete(f"/projects/{project['id']}")
+
+
 def test_chat_returns_answer_with_citations() -> None:
     response = client.post(
         "/chat",
