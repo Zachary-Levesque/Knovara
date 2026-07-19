@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     )
     chroma_persist_dir: str = Field(default="./.chroma", alias="CHROMA_PERSIST_DIR")
     sqlite_db_path: str = Field(default="./.knovara.sqlite3", alias="SQLITE_DB_PATH")
+    repository_cache_dir: str = Field(default="./.repos", alias="REPOSITORY_CACHE_DIR")
     default_collection: str = Field(default="seets", alias="DEFAULT_COLLECTION")
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
@@ -52,5 +53,6 @@ OPENAI_CHAT_MODEL = settings.openai_chat_model
 OPENAI_EMBEDDING_MODEL = settings.openai_embedding_model
 CHROMA_PERSIST_DIR = settings.chroma_persist_dir
 SQLITE_DB_PATH = settings.sqlite_db_path
+REPOSITORY_CACHE_DIR = settings.repository_cache_dir
 DEFAULT_COLLECTION = settings.default_collection
 CORS_ORIGINS = settings.parsed_cors_origins
