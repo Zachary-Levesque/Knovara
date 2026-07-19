@@ -110,6 +110,8 @@ def update_project(project_id: int, request: ProjectUpdate) -> Project:
     updates = request.model_dump(exclude_none=True)
     if not updates:
         return existing
+    if {"collection_name", "source_path"} & updates.keys() and "ingest_status" not in updates:
+        updates["ingest_status"] = "not_ingested"
 
     assignments = [f"{key} = ?" for key in updates]
     values = list(updates.values())
