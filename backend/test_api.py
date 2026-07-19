@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 import chat as chat_module
+import analysis as analysis_module
 import main
 
 from ingest import chunk_documents, load_files
@@ -124,6 +125,7 @@ def test_project_overview_extracts_onboarding_context() -> None:
     body = response.json()
     assert body["project_name"] == "Overview Project"
     assert body["source_type"] == "local"
+    assert body["mode"] in {"deterministic", "llm"}
     assert body["source_count"] >= 5
     assert "main.py" in body["repository_structure"]["entry_points"]
     assert "Markdown documentation" in body["technologies"]
@@ -284,6 +286,68 @@ def test_project_overview_includes_repository_activity(tmp_path: Path) -> None:
     assert activity["contributors"][0]["name"] == "Ada Lovelace"
     assert activity["recent_commits"][0]["message"] == "Update service"
     assert activity["hotspots"][0]["path"] == "service.py"
+
+    client.delete(f"/projects/{project['id']}")
+
+
+def test_project_overview_uses_llm_when_configured(monkeypatch) -> None:
+    collection_name = f"llm_overview_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "LLM Overview Project",
+            "collection_name": collection_name,
+            "source_path": str(REPO_ROOT / "example_data"),
+        },
+    ).json()
+
+    monkeypatch.setattr(analysis_module, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(analysis_module, "OpenAI", _fake_openai_with_content(
+        """
+        {
+          "summary": "Generated onboarding summary.",
+          "technologies": ["Python", "Markdown"],
+          "topics": ["gateway", "events"],
+          "components": ["Gateway service", "Cloud API"],
+          "ownership": ["Platform lead owns API contracts."],
+          "decisions": ["ADR-001 keeps retries in the gateway."],
+          "learning_path": ["Read architecture", "Trace gateway flow", "Pair on schema change"],
+          "starter_questions": ["What owns retries?", "Who reviews schema changes?"]
+        }
+        """
+    ))
+
+    response = client.get(f"/projects/{project['id']}/overview")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "llm"
+    assert body["summary"] == "Generated onboarding summary."
+    assert body["components"] == ["Gateway service", "Cloud API"]
+    assert body["repository_structure"]["entry_points"]
+    assert "repository_activity" in body
+
+    client.delete(f"/projects/{project['id']}")
+
+
+def test_project_overview_falls_back_when_llm_generation_fails(monkeypatch) -> None:
+    collection_name = f"llm_fallback_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "LLM Fallback Project",
+            "collection_name": collection_name,
+            "source_path": str(REPO_ROOT / "example_data"),
+        },
+    ).json()
+
+    monkeypatch.setattr(analysis_module, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(analysis_module, "OpenAI", _fake_openai_with_content("not json"))
+
+    response = client.get(f"/projects/{project['id']}/overview")
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "deterministic"
 
     client.delete(f"/projects/{project['id']}")
 
@@ -495,3 +559,31 @@ def _git(repo: Path, args: list[str]) -> None:
         capture_output=True,
         text=True,
     )
+
+
+def _fake_openai_with_content(content: str):
+    class FakeMessage:
+        def __init__(self, content: str):
+            self.content = content
+
+    class FakeChoice:
+        def __init__(self, content: str):
+            self.message = FakeMessage(content)
+
+    class FakeResponse:
+        def __init__(self, content: str):
+            self.choices = [FakeChoice(content)]
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return FakeResponse(content)
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeOpenAI:
+        def __init__(self, api_key: str):
+            self.api_key = api_key
+            self.chat = FakeChat()
+
+    return FakeOpenAI
