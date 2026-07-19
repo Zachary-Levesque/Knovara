@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -8,7 +9,7 @@ import main
 from ingest import chunk_documents, load_files
 from main import app
 from models import Document
-from repositories import analyze_repository_structure, normalize_github_url
+from repositories import analyze_repository_activity, analyze_repository_structure, normalize_github_url
 from retrieval import CollectionDetail, SourceChunk, SourcePreview
 
 
@@ -252,6 +253,41 @@ def test_repository_structure_extracts_key_files() -> None:
     assert "main.py" in structure.key_files
 
 
+def test_repository_activity_extracts_git_history(tmp_path: Path) -> None:
+    repo = _create_git_repo(tmp_path)
+
+    activity = analyze_repository_activity(repo)
+
+    assert activity.contributors[0].name == "Ada Lovelace"
+    assert activity.contributors[0].commits == 2
+    assert activity.recent_commits[0].message == "Update service"
+    assert any(hotspot.path == "service.py" for hotspot in activity.hotspots)
+    assert any(hint.path == "service.py" and hint.owner == "Ada Lovelace" for hint in activity.ownership_hints)
+
+
+def test_project_overview_includes_repository_activity(tmp_path: Path) -> None:
+    repo = _create_git_repo(tmp_path)
+    collection_name = f"activity_{uuid4().hex[:8]}"
+    project = client.post(
+        "/projects",
+        json={
+            "name": "Activity Project",
+            "collection_name": collection_name,
+            "source_path": str(repo),
+        },
+    ).json()
+
+    response = client.get(f"/projects/{project['id']}/overview")
+
+    assert response.status_code == 200
+    activity = response.json()["repository_activity"]
+    assert activity["contributors"][0]["name"] == "Ada Lovelace"
+    assert activity["recent_commits"][0]["message"] == "Update service"
+    assert activity["hotspots"][0]["path"] == "service.py"
+
+    client.delete(f"/projects/{project['id']}")
+
+
 def test_chat_returns_answer_with_citations() -> None:
     response = client.post(
         "/chat",
@@ -434,3 +470,28 @@ def test_load_files_reads_supported_example_data() -> None:
         ".md",
         ".py",
     }
+
+
+def _create_git_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, ["init"])
+    _git(repo, ["config", "user.name", "Ada Lovelace"])
+    _git(repo, ["config", "user.email", "ada@example.com"])
+    (repo / "README.md").write_text("# Demo Repo\n\nRepository for activity tests.\n", encoding="utf-8")
+    (repo / "service.py").write_text("def run():\n    return 'ok'\n", encoding="utf-8")
+    _git(repo, ["add", "."])
+    _git(repo, ["commit", "-m", "Initial service"])
+    (repo / "service.py").write_text("def run():\n    return 'updated'\n", encoding="utf-8")
+    _git(repo, ["add", "."])
+    _git(repo, ["commit", "-m", "Update service"])
+    return repo
+
+
+def _git(repo: Path, args: list[str]) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
